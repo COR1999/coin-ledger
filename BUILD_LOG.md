@@ -4,7 +4,7 @@
 Current phase: 0
 
 ## Shipped
-_(feature — date — one-line note)_
+- Phase 0 tooling — 2026-09-29 — app at repo root; Vitest/zod/Prettier/shadcn; CI (lint/format/typecheck/test); server-only env validation; arc-canteen 0.1.17 installed. Pending: `arc-canteen login` (→ tasks 8-11) and CI run on a remote.
 
 ## Testnet transactions
 | Date | Purpose | Amount | Tx hash |
