@@ -4,7 +4,7 @@
 Current phase: 0
 
 ## Shipped
-- Phase 0 tooling — 2026-09-29 — app at repo root; Vitest/zod/Prettier/shadcn; CI (lint/format/typecheck/test); server-only env validation; arc-canteen 0.1.17 installed. Pending: `arc-canteen login` (→ tasks 8-11) and CI run on a remote.
+- **Phase 0 complete — 2026-09-30** — app at repo root; Vitest/zod/Prettier/shadcn; CI green on GitHub (`COR1999/financial-operator`, branch `phase-0`); server-only env validation; arc-canteen logged in, testnet verified live (5042002, <1s finality), wallet funded $5 USDC, EURC contract + decimals + gas confirmed from synced docs.
 
 ## Testnet transactions
 | Date | Purpose | Amount | Tx hash |
@@ -25,19 +25,28 @@ Current phase: 0
 - RPC host: `https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>` (exact URL via `arc-canteen rpc-url`; token = secret).
 - Explorer: https://testnet.arcscan.app
 - Docs bundle synced from `the-canteen-dev/context-arc` to `~/.arc-canteen/context/` via `arc-canteen context sync`.
-- **Still to verify post-login:** live block/chainId RPC calls, wallet address + balances, EURC availability/contract/decimals, finality. (Contract `0x89B5…D72a` in payments.md is UNVERIFIED — check `contract-addresses`.)
+
+### Verified post-login against live CLI + synced docs (2026-09-30)
+- **Testnet live:** `eth_blockNumber` returned `0x3db1942` (advancing); `eth_chainId` = `0x4cef52` = **5042002** ✓.
+- **App wallet:** `0xda9F9577a18530A9766C1Cc74ACd72A25dc33312`, funded **$5 testnet USDC**. Private key lives in arc-canteen's config only; app does not hold it (ARC_PRIVATE_KEY unset — architecture is an open integration question).
+- **Gas:** all fees denominated in **USDC** (native gas token), EWMA base-fee smoothing → stable costs. (`gas-and-fees.md`)
+- **EURC:** contract **`0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`**, **6 decimals**, natively supported; faucet at faucet.circle.com. Confirms the address quoted in payments.md ✓. (`contract-addresses.md`)
+- **⚠️ USDC decimals gotcha:** native USDC gas token uses **18 decimals**, but the USDC ERC-20 interface (`0x3600…0000`) uses **6 decimals**. EURC uses 6. Always call `decimals()`; never mix. Relevant to `lib/config.ts` money handling.
+- **Finality:** deterministic, **under one second**, irreversible (`deterministic-finality.md`) — confirms the ~1s assumption in payments.md's MockPaymentProvider.
+- **RPC in `.env.local`:** `ARC_RPC_URL` written (host `rpc.testnet.arc-node.thecanteenapp.com`; token redacted, file gitignored).
+- **Testnet funds:** USDC $5 ✓ · EURC 0 (request from faucet.circle.com when needed).
 
 ## Integration questions & answers
 Sent to Aomi / Canteen / Tameion on: ____
 
 | # | Question | Answer |
 |---|---|---|
-| 1 | Is Arc testnet still the right network for this hackathon now that mainnet is live? | |
+| 1 | Is Arc testnet still the right network for this hackathon now that mainnet is live? | Tooling verified: arc-canteen provisions testnet (5042002) and it's live (block advancing). Treating testnet as correct; still worth a Canteen nod. |
 | 2 | Wallet architecture: raw key, Circle developer-controlled wallets, or Aomi agent wallet? | |
 | 3 | Should the executor be an Aomi agent? How does it receive an authorized request from our server? | |
 | 4 | What signs transactions, and where do keys live? | |
-| 5 | Confirm EURC + testnet contract address. | |
-| 6 | Gas: USDC balance required, or a paymaster? | |
+| 5 | Confirm EURC + testnet contract address. | Verified from `contract-addresses.md`: EURC `0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`, 6 decimals, native on Arc testnet. |
+| 6 | Gas: USDC balance required, or a paymaster? | Gas is paid in native USDC (wallet funded $5). Whether to use a paymaster/account-abstraction still open — see `account-abstraction.md`. |
 | 7 | Recommended way to monitor transaction status? | |
 | 8 | Are txs through our `arc-canteen rpc-url` automatically tracked? | |
 | 9 | Recommended use of `update-product`, `update-traction`, `submit-showcase`? | |
