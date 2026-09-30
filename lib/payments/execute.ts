@@ -5,6 +5,7 @@ import { formatCents } from "@/lib/money";
 import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
 import { getSeedObligations } from "@/lib/repositories/in-memory";
 import type { Repositories } from "@/lib/repositories/types";
+import { deterministicIdempotencyKey } from "./idempotency";
 import type { PaymentProvider } from "./types";
 
 export class ExecutionError extends Error {
@@ -163,7 +164,7 @@ export async function executePayment(
 
   await repos.proposals.update(proposalId, { status: "executing" });
 
-  const idempotencyKey = `proposal-${proposalId}`;
+  const idempotencyKey = deterministicIdempotencyKey(`proposal-${proposalId}`);
 
   try {
     const submitResult = await provider.submit({
