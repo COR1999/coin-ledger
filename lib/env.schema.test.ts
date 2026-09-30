@@ -4,7 +4,7 @@ import { parseEnv } from "./env.schema";
 
 describe("parseEnv", () => {
   it("defaults PAYMENT_PROVIDER to mock when unset", () => {
-    const env = parseEnv({});
+    const env = parseEnv({ ANTHROPIC_API_KEY: "sk-test" });
     expect(env.PAYMENT_PROVIDER).toBe("mock");
   });
 
@@ -19,12 +19,18 @@ describe("parseEnv", () => {
   });
 
   it("rejects an unknown payment provider", () => {
-    expect(() => parseEnv({ PAYMENT_PROVIDER: "paypal" })).toThrow(
-      /Invalid environment variables/,
-    );
+    expect(() =>
+      parseEnv({ PAYMENT_PROVIDER: "paypal", ANTHROPIC_API_KEY: "sk-test" }),
+    ).toThrow(/Invalid environment variables/);
   });
 
   it("rejects a non-URL ARC_RPC_URL", () => {
-    expect(() => parseEnv({ ARC_RPC_URL: "not-a-url" })).toThrow(/ARC_RPC_URL/);
+    expect(() =>
+      parseEnv({ ARC_RPC_URL: "not-a-url", ANTHROPIC_API_KEY: "sk-test" }),
+    ).toThrow(/ARC_RPC_URL/);
+  });
+
+  it("rejects a missing ANTHROPIC_API_KEY", () => {
+    expect(() => parseEnv({})).toThrow(/ANTHROPIC_API_KEY/);
   });
 });

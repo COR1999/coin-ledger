@@ -1,0 +1,329 @@
+import { z } from "zod";
+import { SEED_TODAY } from "@/lib/data/seed";
+import type { Repositories } from "@/lib/repositories/types";
+import { getSeedObligations } from "@/lib/repositories/in-memory";
+import {
+  forecast30Day,
+  safeToSpendCents,
+  upcomingObligationsCents,
+} from "@/lib/finance/engine";
+import { evaluatePolicy, type PolicyBusinessState } from "@/lib/policy/engine";
+import { formatEuros, parseAmountToCents } from "@/lib/money";
+import { proposedPaymentSchema } from "@/lib/domain/types";
+import type { Actor } from "@/lib/domain/types";
+import type Anthropic from "@anthropic-ai/sdk";
+
+const getBalanceSchema = z.object({});
+const getObligationsSchema = z.object({});
+const getForecastSchema = z.object({});
+const getSupplierSchema = z.object({
+  supplierId: z.string().min(1),
+});
+const checkPolicySchema = z.object({
+  supplierId: z.string().min(1),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+});
+
+export const toolDefinitions: Anthropic.Tool[] = [
+  {
+    name: "getBalance",
+    description:
+      "Get the current cash balance, safe-to-spend amount, and upcoming obligations total for the business.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "getObligations",
+    description:
+      "List all upcoming financial obligations (bills, wages, rent, etc.) due in the next 30 days with amounts and due dates.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "getForecast",
+    description:
+      "Get the 30-day cash forecast showing projected balance after all obligations clear (conservative, no new revenue assumed).",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "getSupplier",
+    description:
+      "Look up a supplier by ID. Returns name, monthly limit, spend this month, and whether employees may pay them.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        supplierId: {
+          type: "string",
+          description: 'Supplier ID, e.g. "abc-coffee", "local-veg"',
+        },
+      },
+      required: ["supplierId"],
+    },
+  },
+  {
+    name: "checkPolicy",
+    description:
+      "Check what the policy engine would decide for a payment of a given amount to a given supplier, without creating a proposal. Returns allowed/needs_approval/rejected and reasons.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        supplierId: {
+          type: "string",
+          description: "Supplier ID",
+        },
+        amount: {
+          type: "string",
+          description: 'Decimal amount in EUR, e.g. "2400.00"',
+        },
+      },
+      required: ["supplierId", "amount"],
+    },
+  },
+  {
+    name: "proposePayment",
+    description:
+      "Create a payment proposal for a specific amount to a specific supplier. This does NOT execute the payment — it creates a pending proposal that goes through the approval/confirmation flow. Returns the proposal with its policy decision.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        supplierId: {
+          type: "string",
+          description: "Supplier ID",
+        },
+        amount: {
+          type: "string",
+          description: 'Decimal amount in EUR, e.g. "30.00"',
+        },
+        currency: {
+          type: "string",
+          enum: ["EUR"],
+        },
+        reason: {
+          type: "string",
+          description: "Brief reason for the payment",
+        },
+      },
+      required: ["supplierId", "amount", "currency", "reason"],
+    },
+  },
+];
+
+async function buildBusinessState(
+  repos: Repositories,
+): Promise<PolicyBusinessState> {
+  const [business, todaySpentByBusiness] = await Promise.all([
+    repos.business.get(),
+    repos.transactions.spentOnDateCents(SEED_TODAY),
+  ]);
+  const obligations = getSeedObligations();
+  const obligationsNext30Days = upcomingObligationsCents(
+    obligations,
+    SEED_TODAY,
+    30,
+  );
+
+  return {
+    balanceCents: business.currentBalanceCents,
+    obligationsNext30DaysCents: obligationsNext30Days,
+    todaySpentByActorCents: 0,
+    todaySpentByBusinessCents: todaySpentByBusiness,
+  };
+}
+
+export async function executeTool(
+  toolName: string,
+  rawInput: unknown,
+  repos: Repositories,
+  actor: Actor,
+): Promise<string> {
+  switch (toolName) {
+    case "getBalance": {
+      getBalanceSchema.parse(rawInput);
+      const [business, policies] = await Promise.all([
+        repos.business.get(),
+        repos.policies.get(),
+      ]);
+      const obligations = getSeedObligations();
+      const obligationsTotal = upcomingObligationsCents(
+        obligations,
+        SEED_TODAY,
+        30,
+      );
+      const safe = safeToSpendCents({
+        balanceCents: business.currentBalanceCents,
+        obligationsNext30DaysCents: obligationsTotal,
+        minimumReserveCents: policies.minimumReserveCents,
+      });
+      return JSON.stringify({
+        currentBalance: formatEuros(business.currentBalanceCents),
+        obligationsNext30Days: formatEuros(obligationsTotal),
+        minimumReserve: formatEuros(policies.minimumReserveCents),
+        safeToSpend: formatEuros(safe),
+        formula:
+          "safe-to-spend = balance − obligations (30 days) − minimum reserve",
+      });
+    }
+
+    case "getObligations": {
+      getObligationsSchema.parse(rawInput);
+      const obligations = getSeedObligations();
+      const upcoming = obligations
+        .filter((o) => o.dueDate >= SEED_TODAY)
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+      return JSON.stringify(
+        upcoming.map((o) => ({
+          name: o.name,
+          amount: formatEuros(o.amountCents),
+          dueDate: o.dueDate,
+          category: o.category,
+        })),
+      );
+    }
+
+    case "getForecast": {
+      getForecastSchema.parse(rawInput);
+      const business = await repos.business.get();
+      const obligations = getSeedObligations();
+      const fc = forecast30Day(business, obligations, SEED_TODAY);
+      return JSON.stringify({
+        startingBalance: formatEuros(fc.startingBalanceCents),
+        totalObligations: formatEuros(fc.totalObligationsCents),
+        projectedBalance: formatEuros(fc.projectedBalanceCents),
+        note: "Conservative — assumes no new revenue arrives.",
+      });
+    }
+
+    case "getSupplier": {
+      const input = getSupplierSchema.parse(rawInput);
+      const supplier = await repos.suppliers.getById(input.supplierId);
+      if (!supplier) {
+        return JSON.stringify({ error: `Supplier "${input.supplierId}" not found` });
+      }
+      return JSON.stringify({
+        id: supplier.id,
+        name: supplier.name,
+        category: supplier.category,
+        employeeApproved: supplier.employeeApproved,
+        monthlyLimit: supplier.monthlyLimitCents
+          ? formatEuros(supplier.monthlyLimitCents)
+          : "none",
+        spentThisMonth: formatEuros(supplier.spentThisMonthCents),
+        remainingThisMonth: supplier.monthlyLimitCents
+          ? formatEuros(
+              supplier.monthlyLimitCents - supplier.spentThisMonthCents,
+            )
+          : "unlimited",
+      });
+    }
+
+    case "checkPolicy": {
+      const input = checkPolicySchema.parse(rawInput);
+      const amountCents = parseAmountToCents(input.amount);
+      const supplier = await repos.suppliers.getById(input.supplierId);
+      if (!supplier) {
+        return JSON.stringify({ error: `Supplier "${input.supplierId}" not found` });
+      }
+      const [policies, businessState] = await Promise.all([
+        repos.policies.get(),
+        buildBusinessState(repos),
+      ]);
+      const decision = evaluatePolicy({
+        amountCents,
+        actor,
+        supplier,
+        businessState,
+        policies,
+      });
+      return JSON.stringify({
+        decision: decision.decision,
+        requiredApproverRole: decision.requiredApproverRole ?? null,
+        requiresConfirmation: decision.requiresConfirmation,
+        reasons: decision.reasons,
+      });
+    }
+
+    case "proposePayment": {
+      const input = proposedPaymentSchema.parse(rawInput);
+      const amountCents = parseAmountToCents(input.amount);
+      const supplier = await repos.suppliers.getById(input.supplierId);
+      if (!supplier) {
+        return JSON.stringify({ error: `Supplier "${input.supplierId}" not found` });
+      }
+      const [policies, businessState] = await Promise.all([
+        repos.policies.get(),
+        buildBusinessState(repos),
+      ]);
+      const decision = evaluatePolicy({
+        amountCents,
+        actor,
+        supplier,
+        businessState,
+        policies,
+      });
+
+      if (decision.decision === "rejected") {
+        return JSON.stringify({
+          created: false,
+          decision: "rejected",
+          reasons: decision.reasons,
+        });
+      }
+
+      let status: "approved" | "pending" | "awaiting_confirmation";
+      if (decision.decision === "needs_approval") {
+        status = "pending";
+      } else if (decision.requiresConfirmation) {
+        status = "awaiting_confirmation";
+      } else {
+        status = "approved";
+      }
+
+      const proposal = await repos.proposals.create({
+        supplierId: input.supplierId,
+        amountCents,
+        currency: input.currency,
+        reason: input.reason,
+        proposedByActorId: actor.id,
+        policyDecision: decision.decision,
+        requiredApproverRole: decision.requiredApproverRole,
+        requiresConfirmation: decision.requiresConfirmation,
+        status,
+      });
+
+      const result: Record<string, unknown> = {
+        created: true,
+        proposalId: proposal.id,
+        status: proposal.status,
+        decision: decision.decision,
+        reasons: decision.reasons,
+        requiresConfirmation: decision.requiresConfirmation,
+      };
+
+      if (decision.decision === "needs_approval") {
+        result.requiredApproverRole = decision.requiredApproverRole;
+        result.message = `This payment requires ${decision.requiredApproverRole} approval. It has been added to the approval queue.`;
+      } else if (decision.requiresConfirmation) {
+        result.message = `This payment is above the ${formatEuros(policies.confirmationThresholdCents)} confirmation threshold. Please confirm it before it executes.`;
+      } else {
+        result.message =
+          "Payment approved by policy. It will be executed automatically.";
+        result.autoExecute = true;
+      }
+
+      return JSON.stringify(result);
+    }
+
+    default:
+      return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+  }
+}

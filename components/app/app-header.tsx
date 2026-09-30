@@ -13,7 +13,7 @@ export function AppHeader({
   businessName: string;
   actors: Actor[];
   currentActor: Actor;
-  active: "dashboard" | "settings";
+  active: "dashboard" | "chat" | "approvals" | "settings";
 }) {
   return (
     <header className="border-b bg-background">
@@ -30,6 +30,12 @@ export function AppHeader({
           <nav aria-label="Primary" className="flex items-center gap-1">
             <NavLink href="/" current={active === "dashboard"}>
               Dashboard
+            </NavLink>
+            <NavLink href="/chat" current={active === "chat"}>
+              Chat
+            </NavLink>
+            <NavLink href="/approvals" current={active === "approvals"}>
+              Approvals
             </NavLink>
             <NavLink href="/settings" current={active === "settings"}>
               Policies
