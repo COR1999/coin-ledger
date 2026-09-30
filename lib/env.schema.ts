@@ -15,7 +15,7 @@ export const envSchema = z.object({
   ARC_RPC_URL: z.string().url().optional(),
   // Only present if the confirmed architecture uses a raw-key wallet.
   ARC_PRIVATE_KEY: z.string().min(1).optional(),
-  ANTHROPIC_API_KEY: z.string().min(1),
+  GOOGLE_API_KEY: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

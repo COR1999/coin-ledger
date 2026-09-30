@@ -11,11 +11,8 @@ import { evaluatePolicy, type PolicyBusinessState } from "@/lib/policy/engine";
 import { formatEuros, parseAmountToCents } from "@/lib/money";
 import { proposedPaymentSchema } from "@/lib/domain/types";
 import type { Actor } from "@/lib/domain/types";
-import type Anthropic from "@anthropic-ai/sdk";
+import { Type, type FunctionDeclaration } from "@google/genai";
 
-const getBalanceSchema = z.object({});
-const getObligationsSchema = z.object({});
-const getForecastSchema = z.object({});
 const getSupplierSchema = z.object({
   supplierId: z.string().min(1),
 });
@@ -24,46 +21,43 @@ const checkPolicySchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
 });
 
-export const toolDefinitions: Anthropic.Tool[] = [
+export const toolDefinitions: FunctionDeclaration[] = [
   {
     name: "getBalance",
     description:
       "Get the current cash balance, safe-to-spend amount, and upcoming obligations total for the business.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {},
-      required: [],
     },
   },
   {
     name: "getObligations",
     description:
       "List all upcoming financial obligations (bills, wages, rent, etc.) due in the next 30 days with amounts and due dates.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {},
-      required: [],
     },
   },
   {
     name: "getForecast",
     description:
       "Get the 30-day cash forecast showing projected balance after all obligations clear (conservative, no new revenue assumed).",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {},
-      required: [],
     },
   },
   {
     name: "getSupplier",
     description:
       "Look up a supplier by ID. Returns name, monthly limit, spend this month, and whether employees may pay them.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         supplierId: {
-          type: "string",
+          type: Type.STRING,
           description: 'Supplier ID, e.g. "abc-coffee", "local-veg"',
         },
       },
@@ -74,15 +68,15 @@ export const toolDefinitions: Anthropic.Tool[] = [
     name: "checkPolicy",
     description:
       "Check what the policy engine would decide for a payment of a given amount to a given supplier, without creating a proposal. Returns allowed/needs_approval/rejected and reasons.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         supplierId: {
-          type: "string",
+          type: Type.STRING,
           description: "Supplier ID",
         },
         amount: {
-          type: "string",
+          type: Type.STRING,
           description: 'Decimal amount in EUR, e.g. "2400.00"',
         },
       },
@@ -93,23 +87,23 @@ export const toolDefinitions: Anthropic.Tool[] = [
     name: "proposePayment",
     description:
       "Create a payment proposal for a specific amount to a specific supplier. This does NOT execute the payment — it creates a pending proposal that goes through the approval/confirmation flow. Returns the proposal with its policy decision.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         supplierId: {
-          type: "string",
+          type: Type.STRING,
           description: "Supplier ID",
         },
         amount: {
-          type: "string",
+          type: Type.STRING,
           description: 'Decimal amount in EUR, e.g. "30.00"',
         },
         currency: {
-          type: "string",
+          type: Type.STRING,
           enum: ["EUR"],
         },
         reason: {
-          type: "string",
+          type: Type.STRING,
           description: "Brief reason for the payment",
         },
       },
@@ -148,7 +142,6 @@ export async function executeTool(
 ): Promise<string> {
   switch (toolName) {
     case "getBalance": {
-      getBalanceSchema.parse(rawInput);
       const [business, policies] = await Promise.all([
         repos.business.get(),
         repos.policies.get(),
@@ -175,7 +168,6 @@ export async function executeTool(
     }
 
     case "getObligations": {
-      getObligationsSchema.parse(rawInput);
       const obligations = getSeedObligations();
       const upcoming = obligations
         .filter((o) => o.dueDate >= SEED_TODAY)
@@ -191,7 +183,6 @@ export async function executeTool(
     }
 
     case "getForecast": {
-      getForecastSchema.parse(rawInput);
       const business = await repos.business.get();
       const obligations = getSeedObligations();
       const fc = forecast30Day(business, obligations, SEED_TODAY);

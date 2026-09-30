@@ -1,19 +1,61 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import {
+  GoogleGenAI,
+  type Content,
+  type GenerateContentResponse,
+} from "@google/genai";
 import type { Actor } from "@/lib/domain/types";
 import type { Repositories } from "@/lib/repositories/types";
 import { toolDefinitions, executeTool } from "./tools";
 import { formatEuros } from "@/lib/money";
 
 const MAX_ITERATIONS = 10;
+const MODEL = "gemini-3.5-flash";
+const MAX_RETRIES = 4;
+const BASE_BACKOFF_MS = 1000;
 
-function buildSystemPrompt(actor: Actor, policies: {
-  roles: Record<string, { maxSinglePaymentCents: number; dailyLimitCents: number | null; approvalLimitCents: number | null }>;
-  confirmationThresholdCents: number;
-  minimumReserveCents: number;
-  businessDailyLimitCents: number;
-}): string {
+function isTransient(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('"code":503') || message.includes('"code":429');
+}
+
+async function generateWithRetry(
+  fn: () => Promise<GenerateContentResponse>,
+): Promise<GenerateContentResponse> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (!isTransient(error) || attempt === MAX_RETRIES - 1) {
+        throw error;
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, BASE_BACKOFF_MS * 2 ** attempt),
+      );
+    }
+  }
+  throw lastError;
+}
+
+function buildSystemPrompt(
+  actor: Actor,
+  policies: {
+    roles: Record<
+      string,
+      {
+        maxSinglePaymentCents: number;
+        dailyLimitCents: number | null;
+        approvalLimitCents: number | null;
+      }
+    >;
+    confirmationThresholdCents: number;
+    minimumReserveCents: number;
+    businessDailyLimitCents: number;
+  },
+): string {
   const roleLimits = policies.roles[actor.role];
   return `You are the financial operator for Mario's Coffee, a small café. You help staff manage payments safely.
 
@@ -58,87 +100,92 @@ export async function runAgent(
   actor: Actor,
   repos: Repositories,
 ): Promise<AgentResponse> {
-  const client = new Anthropic();
+  const client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
   const policies = await repos.policies.get();
 
-  const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
-    role: m.role,
-    content: m.content,
+  const contents: Content[] = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
   }));
 
   let proposalId: string | undefined;
   let autoExecute = false;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-5-5",
-      max_tokens: 4096,
-      system: buildSystemPrompt(actor, policies),
-      tools: toolDefinitions,
-      messages: apiMessages,
-    });
+    const response = await generateWithRetry(() =>
+      client.models.generateContent({
+        model: MODEL,
+        contents,
+        config: {
+          systemInstruction: buildSystemPrompt(actor, policies),
+          tools: [{ functionDeclarations: toolDefinitions }],
+        },
+      }),
+    );
 
-    if (response.stop_reason === "end_turn") {
-      const textBlock = response.content.find(
-        (b): b is Anthropic.TextBlock => b.type === "text",
-      );
+    const functionCalls = response.functionCalls;
+
+    if (!functionCalls || functionCalls.length === 0) {
       return {
-        message: textBlock?.text ?? "",
+        message: response.text ?? "",
         proposalId,
         autoExecute,
       };
     }
 
-    if (response.stop_reason === "tool_use") {
-      const toolUseBlocks = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-      );
+    // Record the model's turn verbatim — the original parts carry the
+    // thoughtSignature Gemini 3 requires when function calls are echoed back.
+    const modelContent = response.candidates?.[0]?.content;
+    if (modelContent) {
+      contents.push(modelContent);
+    } else {
+      contents.push({
+        role: "model",
+        parts: functionCalls.map((fc) => ({ functionCall: fc })),
+      });
+    }
 
-      apiMessages.push({ role: "assistant", content: response.content });
+    const responseParts: Content["parts"] = [];
+    for (const call of functionCalls) {
+      const name = call.name ?? "";
+      try {
+        const result = await executeTool(
+          name,
+          call.args ?? {},
+          repos,
+          actor,
+        );
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const tool of toolUseBlocks) {
-        try {
-          const result = await executeTool(
-            tool.name,
-            tool.input,
-            repos,
-            actor,
-          );
+        const parsed = JSON.parse(result);
+        if (parsed.proposalId) {
+          proposalId = parsed.proposalId;
+        }
+        if (parsed.autoExecute) {
+          autoExecute = true;
+        }
 
-          const parsed = JSON.parse(result);
-          if (parsed.proposalId) {
-            proposalId = parsed.proposalId;
-          }
-          if (parsed.autoExecute) {
-            autoExecute = true;
-          }
-
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: tool.id,
-            content: result,
-          });
-        } catch (error) {
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: tool.id,
-            content: JSON.stringify({
+        responseParts.push({
+          functionResponse: {
+            name,
+            response: parsed,
+          },
+        });
+      } catch (error) {
+        responseParts.push({
+          functionResponse: {
+            name,
+            response: {
               error:
                 error instanceof Error
                   ? error.message
                   : "Tool execution failed",
-            }),
-            is_error: true,
-          });
-        }
+            },
+          },
+        });
       }
-
-      apiMessages.push({ role: "user", content: toolResults });
-      continue;
     }
 
-    break;
+    contents.push({ role: "user", parts: responseParts });
   }
 
   return {
