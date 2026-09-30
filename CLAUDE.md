@@ -1,7 +1,7 @@
 # Small Business Financial Operator
 Canteen × Circle × Arc hackathon
 
-**CURRENT PHASE: 4**
+**CURRENT PHASE: 6**
 *(I update this line. Work only on this phase.)*
 
 ## Start of every session
