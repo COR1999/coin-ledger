@@ -66,6 +66,11 @@ export const seedSuppliers: Supplier[] = [
     employeeApproved: true,
     monthlyLimitCents: eur(8_000),
     spentThisMonthCents: eur(4_600),
+    // Disposable testnet wallet, separate from the business wallet (see
+    // docs/spec/payments.md § Supplier wallet). Circle-managed (wallet set
+    // ee01db39-ea3a-55bf-b75b-cfdcd58a58dc) so the refund script
+    // (scripts/refund-to-business.ts) can sweep test funds back.
+    walletAddress: "0xe6f53dfee8ac633ce62ab09675fd0d43408e8acb",
   },
   {
     id: "local-veg",
@@ -74,6 +79,7 @@ export const seedSuppliers: Supplier[] = [
     employeeApproved: true,
     monthlyLimitCents: eur(1_500),
     spentThisMonthCents: eur(300),
+    walletAddress: "0xe6f53dfee8ac633ce62ab09675fd0d43408e8acb",
   },
   {
     id: "unknown-vendor",

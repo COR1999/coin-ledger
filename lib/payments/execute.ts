@@ -1,8 +1,6 @@
 import { SEED_TODAY, seedActors } from "@/lib/data/seed";
 import type { PaymentProposal } from "@/lib/domain/types";
-import {
-  upcomingObligationsCents,
-} from "@/lib/finance/engine";
+import { upcomingObligationsCents } from "@/lib/finance/engine";
 import { formatCents } from "@/lib/money";
 import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
 import { getSeedObligations } from "@/lib/repositories/in-memory";
@@ -20,7 +18,8 @@ export class ExecutionError extends Error {
       | "INVALID_APPROVER"
       | "ALREADY_EXECUTED"
       | "POLICY_REJECTED"
-      | "PROVIDER_FAILED",
+      | "PROVIDER_FAILED"
+      | "MISSING_WALLET_ADDRESS",
   ) {
     super(message);
     this.name = "ExecutionError";
@@ -155,6 +154,13 @@ export async function executePayment(
     }
   }
 
+  if (!supplier.walletAddress) {
+    throw new ExecutionError(
+      `Supplier ${supplier.id} has no on-chain wallet address`,
+      "MISSING_WALLET_ADDRESS",
+    );
+  }
+
   await repos.proposals.update(proposalId, { status: "executing" });
 
   const idempotencyKey = `proposal-${proposalId}`;
@@ -162,7 +168,7 @@ export async function executePayment(
   try {
     const submitResult = await provider.submit({
       idempotencyKey,
-      to: supplier.id,
+      to: supplier.walletAddress,
       amount: formatCents(proposal.amountCents),
       currency: "EURC",
     });

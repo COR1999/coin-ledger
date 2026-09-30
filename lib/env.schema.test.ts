@@ -13,6 +13,9 @@ describe("parseEnv", () => {
       PAYMENT_PROVIDER: "arc",
       ARC_RPC_URL: "https://rpc.example.com/token",
       GOOGLE_API_KEY: "test-key",
+      CIRCLE_API_KEY: "test-api-key",
+      CIRCLE_ENTITY_SECRET: "test-entity-secret",
+      CIRCLE_WALLET_ADDRESS: "0x0000000000000000000000000000000000dead",
     });
     expect(env.PAYMENT_PROVIDER).toBe("arc");
     expect(env.ARC_RPC_URL).toBe("https://rpc.example.com/token");
@@ -32,5 +35,23 @@ describe("parseEnv", () => {
 
   it("rejects a missing GOOGLE_API_KEY", () => {
     expect(() => parseEnv({})).toThrow(/GOOGLE_API_KEY/);
+  });
+
+  it("does not require Circle vars when PAYMENT_PROVIDER=mock", () => {
+    expect(() =>
+      parseEnv({ PAYMENT_PROVIDER: "mock", GOOGLE_API_KEY: "test-key" }),
+    ).not.toThrow();
+  });
+
+  it("treats an empty placeholder value as unset, not invalid", () => {
+    expect(() =>
+      parseEnv({ ARC_PRIVATE_KEY: "", GOOGLE_API_KEY: "test-key" }),
+    ).not.toThrow();
+  });
+
+  it("rejects PAYMENT_PROVIDER=arc without Circle credentials", () => {
+    expect(() =>
+      parseEnv({ PAYMENT_PROVIDER: "arc", GOOGLE_API_KEY: "test-key" }),
+    ).toThrow(/CIRCLE_API_KEY/);
   });
 });

@@ -3,13 +3,13 @@
 import { z } from "zod";
 import { evaluateApproval } from "@/lib/policy/engine";
 import { executePayment } from "@/lib/payments/execute";
-import { MockPaymentProvider } from "@/lib/payments/mock";
+import { getPaymentProvider } from "@/lib/payments/provider";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
 
 const proposalIdSchema = z.string().min(1);
 
-const provider = new MockPaymentProvider();
+const provider = getPaymentProvider();
 
 export interface ActionResult {
   success: boolean;

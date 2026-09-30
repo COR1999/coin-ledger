@@ -105,9 +105,9 @@ describe("executePayment", () => {
     await repos.proposals.update(proposal.id, { status: "executed" });
     const provider = createMockProvider();
 
-    await expect(
-      executePayment(proposal.id, repos, provider),
-    ).rejects.toThrow(ExecutionError);
+    await expect(executePayment(proposal.id, repos, provider)).rejects.toThrow(
+      ExecutionError,
+    );
 
     try {
       await executePayment(proposal.id, repos, provider);
@@ -116,14 +116,31 @@ describe("executePayment", () => {
     }
   });
 
+  it("rejects a supplier with no on-chain wallet address", async () => {
+    const proposal = await createApprovedProposal(repos, {
+      supplierId: "unknown-vendor",
+      proposedByActorId: "mario",
+      amountCents: eur(30),
+    });
+    const provider = createMockProvider();
+
+    try {
+      await executePayment(proposal.id, repos, provider);
+      throw new Error("expected executePayment to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ExecutionError);
+      expect((e as ExecutionError).code).toBe("MISSING_WALLET_ADDRESS");
+    }
+  });
+
   it("rejects a proposal with rejected status", async () => {
     const proposal = await createApprovedProposal(repos);
     await repos.proposals.update(proposal.id, { status: "rejected" });
     const provider = createMockProvider();
 
-    await expect(
-      executePayment(proposal.id, repos, provider),
-    ).rejects.toThrow(ExecutionError);
+    await expect(executePayment(proposal.id, repos, provider)).rejects.toThrow(
+      ExecutionError,
+    );
 
     try {
       await executePayment(proposal.id, repos, provider);
@@ -140,9 +157,9 @@ describe("executePayment", () => {
     });
     const provider = createMockProvider();
 
-    await expect(
-      executePayment(proposal.id, repos, provider),
-    ).rejects.toThrow(ExecutionError);
+    await expect(executePayment(proposal.id, repos, provider)).rejects.toThrow(
+      ExecutionError,
+    );
 
     try {
       await executePayment(proposal.id, repos, provider);
@@ -159,9 +176,9 @@ describe("executePayment", () => {
     });
     const provider = createMockProvider();
 
-    await expect(
-      executePayment(proposal.id, repos, provider),
-    ).rejects.toThrow(ExecutionError);
+    await expect(executePayment(proposal.id, repos, provider)).rejects.toThrow(
+      ExecutionError,
+    );
 
     try {
       await executePayment(proposal.id, repos, provider);
@@ -182,9 +199,9 @@ describe("executePayment", () => {
     });
     const provider = createMockProvider();
 
-    await expect(
-      executePayment(proposal.id, repos, provider),
-    ).rejects.toThrow(ExecutionError);
+    await expect(executePayment(proposal.id, repos, provider)).rejects.toThrow(
+      ExecutionError,
+    );
 
     try {
       await executePayment(proposal.id, repos, provider);

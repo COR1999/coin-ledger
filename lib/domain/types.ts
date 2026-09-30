@@ -27,6 +27,8 @@ export interface Supplier {
   monthlyLimitCents: number | null;
   /** Spend to this supplier so far this calendar month. */
   spentThisMonthCents: number;
+  /** On-chain receiving address. Required once PAYMENT_PROVIDER=arc. */
+  walletAddress?: string;
 }
 
 export interface Obligation {

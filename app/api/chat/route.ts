@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runAgent, type AgentMessage } from "@/lib/agent/agent";
 import { executePayment } from "@/lib/payments/execute";
-import { MockPaymentProvider } from "@/lib/payments/mock";
+import { getPaymentProvider } from "@/lib/payments/provider";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
 
@@ -15,7 +15,7 @@ const requestSchema = z.object({
   ),
 });
 
-const provider = new MockPaymentProvider();
+const provider = getPaymentProvider();
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,11 +25,7 @@ export async function POST(req: NextRequest) {
     const actor = await getCurrentActor();
     const repos = getRepositories();
 
-    const response = await runAgent(
-      messages as AgentMessage[],
-      actor,
-      repos,
-    );
+    const response = await runAgent(messages as AgentMessage[], actor, repos);
 
     if (response.autoExecute && response.proposalId) {
       try {
