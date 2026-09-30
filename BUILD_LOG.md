@@ -1,9 +1,10 @@
 # Build log
 
 ## Status
-Current phase: 0
+Current phase: 1 (engines built; awaiting confirmation before merge)
 
 ## Shipped
+- **Phase 1 — 2026-09-30 (branch `phase-1`, awaiting your confirmation)** — finance + policy engines and seeded in-memory data layer. `lib/money.ts` (integer cents, no floats), `lib/domain/types.ts` (+ zod proposal schema), `lib/data/seed.ts` (Mario's Coffee), `lib/finance/engine.ts`, `lib/policy/engine.ts`, `lib/repositories/` (interfaces + in-memory). **35 tests pass** incl. all 13 policy scenarios + finance figures (safe-to-spend €5,690, 30-day forecast €8,690); typecheck/lint/format clean. No UI, agent, or execution path yet (later phases). Not merged to `main`.
 - **Phase 0 complete — 2026-09-30** — app at repo root; Vitest/zod/Prettier/shadcn; CI green on GitHub (`COR1999/financial-operator`, branch `phase-0`); server-only env validation; arc-canteen logged in, testnet verified live (5042002, <1s finality), wallet funded $5 USDC, EURC contract + decimals + gas confirmed from synced docs.
 
 ## Testnet transactions
@@ -11,6 +12,11 @@ Current phase: 0
 |---|---|---|---|
 
 ## Decisions
+- **Employee daily limit only caps self-authorizable payments** (Phase 1). A payment within the actor's single-payment limit counts against their daily cap; a larger payment escalates to approval instead, where a different authority answers, so the requester's daily cap does not reject it. This reconciles scenario 3 (Liam €2,400 → needs_approval) with scenario 9 (Liam €30 after €280 → rejected). Generalised to any role with a daily limit. (2026-09-30)
+- **Policy reasons are collected, not short-circuited** (Phase 1) — a payment breaking several rules reports all applicable reasons; tests assert the documented reason is present, not that it is the only one. (2026-09-30)
+- **Money is integer cents end to end** (`lib/money.ts`); decimal strings only at boundaries. `eur()` builder keeps float literals out of seed/policy data. (2026-09-30)
+- **Balance stored on the business, not derived from transactions** (Phase 1) — seed gives the authoritative €18,420; the transaction history is illustrative for now, to be expanded in the dashboard phase. (2026-09-30)
+- Added a `@/*` alias to `vitest.config.ts` mirroring `tsconfig.json` so tests resolve the same import paths as the app. (2026-09-30)
 - App moved from `coin-ledger/` subfolder to repo root — matches CLAUDE.md paths (`lib/`, `app/`), simpler scripts/CI. (2026-09-29)
 - Git repo at project root on branch `phase-0`; docs + app version-controlled together. (2026-09-29)
 - `arc-canteen` installed via `pip install arc-canteen` (v0.1.17) — `uv`/`pipx` not present on this machine. (2026-09-29)
