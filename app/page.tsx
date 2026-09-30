@@ -1,68 +1,143 @@
-import Image from "next/image";
+import { AppHeader } from "@/components/app/app-header";
+import { AlertsPanel } from "@/components/dashboard/alerts-panel";
+import { ForecastChart } from "@/components/dashboard/forecast-chart";
+import { ObligationsList } from "@/components/dashboard/obligations-list";
+import { SafeToSpendCard, StatCard } from "@/components/dashboard/stat-card";
+import { TransactionTable } from "@/components/dashboard/transaction-table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SEED_TODAY } from "@/lib/data/seed";
+import { computeAlerts } from "@/lib/finance/alerts";
+import { buildDashboardData } from "@/lib/finance/dashboard";
+import { formatEurosDisplay } from "@/lib/money";
+import { getSeedObligations } from "@/lib/repositories/in-memory";
+import { getRepositories } from "@/lib/repositories/singleton";
+import { getCurrentActor, listActors } from "@/lib/session";
 
-export default function Home() {
+export default async function DashboardPage() {
+  const repos = getRepositories();
+  const [business, suppliers, transactions, policies, actor] =
+    await Promise.all([
+      repos.business.get(),
+      repos.suppliers.list(),
+      repos.transactions.list(),
+      repos.policies.get(),
+      getCurrentActor(),
+    ]);
+  const obligations = getSeedObligations();
+
+  const data = buildDashboardData({
+    business,
+    obligations,
+    transactions,
+    policies,
+    asOf: SEED_TODAY,
+  });
+  const alerts = computeAlerts({
+    safeToSpend: data.safeToSpend,
+    suppliers,
+    obligations: data.obligations.map((o) => ({
+      obligation: o,
+      daysUntilDue: o.daysUntilDue,
+    })),
+  });
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex min-h-full flex-1 flex-col bg-muted/30">
+      <AppHeader
+        businessName={business.name}
+        actors={listActors()}
+        currentActor={actor}
+        active="dashboard"
+      />
+
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold">Cash overview</h1>
+          <p className="text-sm text-muted-foreground">
+            What {business.name} can safely do with its money today, as of{" "}
+            {SEED_TODAY}.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        {/* Top stats */}
+        <section
+          aria-label="Key figures"
+          className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+        >
+          <StatCard
+            title="Current balance"
+            valueCents={data.business.currentBalanceCents}
+            hint="Cash available on Arc (demo scale)"
+          />
+          <StatCard
+            title="Obligations (next 30 days)"
+            valueCents={data.safeToSpend.obligationsNext30DaysCents}
+            hint={`${data.obligations.length} upcoming payments`}
+          />
+          <StatCard
+            title="30-day forecast"
+            valueCents={data.forecast.projectedBalanceCents}
+            tone={
+              data.forecast.projectedBalanceCents <
+              data.safeToSpend.minimumReserveCents
+                ? "negative"
+                : "default"
+            }
+            hint="Projected cash once obligations clear"
+          />
+          <SafeToSpendCard b={data.safeToSpend} />
+        </section>
+
+        {/* Forecast + alerts */}
+        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>30-day cash forecast</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Conservative drawdown from{" "}
+                {formatEurosDisplay(data.forecast.startingBalanceCents)} to{" "}
+                {formatEurosDisplay(data.forecast.projectedBalanceCents)},
+                assuming no new revenue.
+              </p>
+              <ForecastChart
+                series={data.forecastSeries}
+                minimumReserveCents={data.safeToSpend.minimumReserveCents}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Alerts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AlertsPanel alerts={alerts} />
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Obligations + transactions */}
+        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Upcoming obligations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ObligationsList obligations={data.obligations} />
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Recent transactions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TransactionTable transactions={data.transactions} />
+            </CardContent>
+          </Card>
+        </section>
       </main>
     </div>
   );
