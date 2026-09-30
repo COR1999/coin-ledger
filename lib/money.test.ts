@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { eur, formatCents, formatEuros, parseAmountToCents } from "./money";
+import {
+  eur,
+  formatCents,
+  formatEuros,
+  formatEurosDisplay,
+  parseAmountToCents,
+} from "./money";
 
 describe("parseAmountToCents", () => {
   it("parses whole and fractional amounts to integer cents", () => {
@@ -31,6 +37,19 @@ describe("formatCents / formatEuros", () => {
 
   it("round-trips parse then format", () => {
     expect(formatCents(parseAmountToCents("1234.56"))).toBe("1234.56");
+  });
+});
+
+describe("formatEurosDisplay", () => {
+  it("groups thousands and shows cents only when non-zero", () => {
+    expect(formatEurosDisplay(1_842_000)).toBe("€18,420");
+    expect(formatEurosDisplay(569_050)).toBe("€5,690.50");
+    expect(formatEurosDisplay(0)).toBe("€0");
+    expect(formatEurosDisplay(99)).toBe("€0.99");
+  });
+
+  it("keeps the sign in front of the currency symbol", () => {
+    expect(formatEurosDisplay(-280_000)).toBe("-€2,800");
   });
 });
 

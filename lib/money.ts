@@ -48,3 +48,19 @@ export function formatEuros(cents: number): string {
 export function eur(euros: number, cents = 0): number {
   return euros * 100 + cents;
 }
+
+/**
+ * Format integer cents for on-screen display, with thousands grouping and a
+ * trailing ".00" only when there are fractional cents: 1842000 -> "€18,420",
+ * 569050 -> "€5,690.50", -280000 -> "-€2,800". Rounding-free — cents are exact.
+ */
+export function formatEurosDisplay(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  const whole = Math.floor(abs / 100);
+  const fraction = abs % 100;
+  const grouped = whole.toLocaleString("en-IE");
+  const suffix =
+    fraction === 0 ? "" : `.${fraction.toString().padStart(2, "0")}`;
+  return `${sign}€${grouped}${suffix}`;
+}
