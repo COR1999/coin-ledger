@@ -1,3 +1,5 @@
+import { CalendarClock, ShieldCheck, TrendingDown, Wallet } from "lucide-react";
+
 import { AppHeader } from "@/components/app/app-header";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { ForecastChart } from "@/components/dashboard/forecast-chart";
@@ -41,6 +43,9 @@ export default async function DashboardPage() {
     })),
   });
 
+  const forecastBelowReserve =
+    data.forecast.projectedBalanceCents < data.safeToSpend.minimumReserveCents;
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
       <AppHeader
@@ -68,24 +73,25 @@ export default async function DashboardPage() {
             title="Current balance"
             valueCents={data.business.currentBalanceCents}
             hint="Cash available on Arc (demo scale)"
+            accent="info"
+            icon={Wallet}
           />
           <StatCard
             title="Obligations (next 30 days)"
             valueCents={data.safeToSpend.obligationsNext30DaysCents}
             hint={`${data.obligations.length} upcoming payments`}
+            accent="caution"
+            icon={CalendarClock}
           />
           <StatCard
             title="30-day forecast"
             valueCents={data.forecast.projectedBalanceCents}
-            tone={
-              data.forecast.projectedBalanceCents <
-              data.safeToSpend.minimumReserveCents
-                ? "negative"
-                : "default"
-            }
+            tone={forecastBelowReserve ? "negative" : "default"}
+            accent={forecastBelowReserve ? "danger" : "positive"}
+            icon={TrendingDown}
             hint="Projected cash once obligations clear"
           />
-          <SafeToSpendCard b={data.safeToSpend} />
+          <SafeToSpendCard b={data.safeToSpend} icon={ShieldCheck} />
         </section>
 
         {/* Forecast + alerts */}
@@ -104,6 +110,7 @@ export default async function DashboardPage() {
               <ForecastChart
                 series={data.forecastSeries}
                 minimumReserveCents={data.safeToSpend.minimumReserveCents}
+                accent={forecastBelowReserve ? "danger" : "positive"}
               />
             </CardContent>
           </Card>

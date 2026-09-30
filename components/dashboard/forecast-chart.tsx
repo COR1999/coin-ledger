@@ -11,14 +11,24 @@ const PAD = { top: 16, right: 16, bottom: 28, left: 16 };
  * dashed reference line for the minimum reserve. The series is also exposed as a
  * visually-hidden table for screen readers.
  */
+const ACCENTS = {
+  positive: "var(--color-emerald-500)",
+  caution: "var(--color-amber-500)",
+  danger: "var(--color-destructive)",
+} as const;
+
 export function ForecastChart({
   series,
   minimumReserveCents,
+  accent = "positive",
 }: {
   series: ForecastPoint[];
   minimumReserveCents: number;
+  accent?: keyof typeof ACCENTS;
 }) {
   if (series.length < 2) return null;
+
+  const lineColor = ACCENTS[accent];
 
   const values = series.map((p) => p.balanceCents);
   const dataMax = Math.max(...values, minimumReserveCents);
@@ -65,16 +75,8 @@ export function ForecastChart({
       >
         <defs>
           <linearGradient id="forecastFill" x1="0" y1="0" x2="0" y2="1">
-            <stop
-              offset="0%"
-              stopColor="var(--color-primary)"
-              stopOpacity="0.18"
-            />
-            <stop
-              offset="100%"
-              stopColor="var(--color-primary)"
-              stopOpacity="0"
-            />
+            <stop offset="0%" stopColor={lineColor} stopOpacity="0.2" />
+            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -102,24 +104,19 @@ export function ForecastChart({
         <path
           d={linePath}
           fill="none"
-          stroke="var(--color-primary)"
+          stroke={lineColor}
           strokeWidth={2}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
 
         {/* End points. */}
-        <circle
-          cx={x(0)}
-          cy={y(first.balanceCents)}
-          r={3}
-          fill="var(--color-primary)"
-        />
+        <circle cx={x(0)} cy={y(first.balanceCents)} r={3} fill={lineColor} />
         <circle
           cx={x(series.length - 1)}
           cy={y(last.balanceCents)}
           r={3}
-          fill="var(--color-primary)"
+          fill={lineColor}
         />
 
         {/* X-axis endpoint labels. */}
