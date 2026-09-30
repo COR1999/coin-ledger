@@ -1,6 +1,9 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+import { brandThemeCssVars, getBrandTheme } from "@/lib/branding/theme";
+import { getRepositories } from "@/lib/repositories/singleton";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,11 +22,19 @@ export const metadata: Metadata = {
     "AI proposes, rules authorize, humans approve, infrastructure executes.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const business = await getRepositories().business.get();
+  const theme = getBrandTheme(business.id);
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={brandThemeCssVars(theme) as CSSProperties}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

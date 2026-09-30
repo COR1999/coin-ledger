@@ -73,7 +73,7 @@ export default async function DashboardPage() {
             title="Current balance"
             valueCents={data.business.currentBalanceCents}
             hint="Cash available on Arc (demo scale)"
-            accent="info"
+            accent="neutral"
             icon={Wallet}
           />
           <StatCard
