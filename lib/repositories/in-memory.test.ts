@@ -34,6 +34,9 @@ describe("in-memory repositories", () => {
       currency: "EUR",
       reason: "Supplier payment",
       proposedByActorId: "liam",
+      policyDecision: "needs_approval",
+      requiresConfirmation: true,
+      status: "pending",
     });
     expect(proposal.status).toBe("pending");
 

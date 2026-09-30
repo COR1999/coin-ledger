@@ -95,7 +95,14 @@ export const proposedPaymentSchema = z.object({
 export type ProposedPayment = z.infer<typeof proposedPaymentSchema>;
 
 export type ProposalStatus =
-  "pending" | "approved" | "rejected" | "executed" | "failed";
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "awaiting_confirmation"
+  | "confirmed"
+  | "executing"
+  | "executed"
+  | "failed";
 
 export interface PaymentProposal {
   id: string;
@@ -106,4 +113,12 @@ export interface PaymentProposal {
   proposedByActorId: string;
   status: ProposalStatus;
   createdAt: string;
+  policyDecision: Decision;
+  requiredApproverRole?: Extract<Role, "owner" | "accountant">;
+  requiresConfirmation: boolean;
+  approvedByActorId?: string;
+  confirmedByActorId?: string;
+  paymentId?: string;
+  txHash?: string;
+  failureReason?: string;
 }

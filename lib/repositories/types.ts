@@ -40,7 +40,26 @@ export interface CreateProposalInput {
   currency: "EUR";
   reason: string;
   proposedByActorId: string;
+  policyDecision: import("@/lib/domain/types").Decision;
+  requiredApproverRole?: Extract<
+    import("@/lib/domain/types").Role,
+    "owner" | "accountant"
+  >;
+  requiresConfirmation: boolean;
+  status: import("@/lib/domain/types").ProposalStatus;
 }
+
+export type ProposalUpdate = Partial<
+  Pick<
+    PaymentProposal,
+    | "status"
+    | "approvedByActorId"
+    | "confirmedByActorId"
+    | "paymentId"
+    | "txHash"
+    | "failureReason"
+  >
+>;
 
 export interface PaymentProposalRepository {
   create(input: CreateProposalInput): Promise<PaymentProposal>;
@@ -50,6 +69,7 @@ export interface PaymentProposalRepository {
     id: string,
     status: PaymentProposal["status"],
   ): Promise<PaymentProposal>;
+  update(id: string, fields: ProposalUpdate): Promise<PaymentProposal>;
 }
 
 export interface Repositories {

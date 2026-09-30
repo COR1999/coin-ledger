@@ -104,8 +104,11 @@ class InMemoryPaymentProposalRepository implements PaymentProposalRepository {
       currency: input.currency,
       reason: input.reason,
       proposedByActorId: input.proposedByActorId,
-      status: "pending",
+      status: input.status,
       createdAt: new Date().toISOString(),
+      policyDecision: input.policyDecision,
+      requiredApproverRole: input.requiredApproverRole,
+      requiresConfirmation: input.requiresConfirmation,
     };
     this.proposals.set(proposal.id, proposal);
     return clone(proposal);
@@ -121,11 +124,18 @@ class InMemoryPaymentProposalRepository implements PaymentProposalRepository {
     id: string,
     status: PaymentProposal["status"],
   ): Promise<PaymentProposal> {
+    return this.update(id, { status });
+  }
+
+  async update(
+    id: string,
+    fields: import("./types").ProposalUpdate,
+  ): Promise<PaymentProposal> {
     const existing = this.proposals.get(id);
     if (!existing) {
       throw new Error(`Unknown proposal: ${id}`);
     }
-    const updated = { ...existing, status };
+    const updated = { ...existing, ...fields };
     this.proposals.set(id, updated);
     return clone(updated);
   }
