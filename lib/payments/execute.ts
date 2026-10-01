@@ -1,10 +1,9 @@
 import { formatOnChainAmount } from "@/lib/config";
-import { SEED_TODAY, seedActors } from "@/lib/data/seed";
+import { SEED_TODAY } from "@/lib/data/seed";
 import type { PaymentProposal } from "@/lib/domain/types";
 import { upcomingObligationsCents } from "@/lib/finance/engine";
 import { formatCents } from "@/lib/money";
 import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
-import { getSeedObligations } from "@/lib/repositories/in-memory";
 import type { Repositories } from "@/lib/repositories/types";
 import { deterministicIdempotencyKey } from "./idempotency";
 import type { PaymentProvider, PaymentStatus } from "./types";
@@ -103,6 +102,8 @@ export async function executePayment(
     policies,
     todaySpentByBusiness,
     todaySpentByActor,
+    actors,
+    obligations,
   ] = await Promise.all([
     repos.business.get(),
     repos.suppliers.getById(proposal.supplierId),
@@ -112,6 +113,8 @@ export async function executePayment(
       SEED_TODAY,
       proposal.proposedByActorId,
     ),
+    repos.actors.list(),
+    repos.obligations.list(),
   ]);
 
   if (!supplier) {
@@ -121,14 +124,13 @@ export async function executePayment(
     );
   }
 
-  const proposer = seedActors.find((a) => a.id === proposal.proposedByActorId);
+  const proposer = actors.find((a) => a.id === proposal.proposedByActorId);
   if (!proposer) {
     throw new ExecutionError(
       `Unknown proposer: ${proposal.proposedByActorId}`,
       "NOT_FOUND",
     );
   }
-  const obligations = getSeedObligations();
   const obligationsNext30Days = upcomingObligationsCents(
     obligations,
     SEED_TODAY,
@@ -163,7 +165,7 @@ export async function executePayment(
     policyResult.decision === "needs_approval" &&
     proposal.approvedByActorId
   ) {
-    const approverActor = seedActors.find(
+    const approverActor = actors.find(
       (a) => a.id === proposal.approvedByActorId,
     );
     if (!approverActor) {

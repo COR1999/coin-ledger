@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { returnToDemoAction } from "@/app/actions/onboarding";
 import { RoleSwitcher } from "@/components/app/role-switcher";
+import { Button } from "@/components/ui/button";
 import type { Actor } from "@/lib/domain/types";
 
 /** Top bar: business identity, primary nav, and the demo role switcher. */
@@ -9,11 +11,14 @@ export function AppHeader({
   actors,
   currentActor,
   active,
+  isDemo = true,
 }: {
   businessName: string;
   actors: Actor[];
   currentActor: Actor;
   active: "dashboard" | "chat" | "approvals" | "transactions" | "settings";
+  /** False when viewing a visitor's own onboarded workspace (Phase 8). */
+  isDemo?: boolean;
 }) {
   return (
     <header className="border-b bg-background">
@@ -66,7 +71,29 @@ export function AppHeader({
             </NavLink>
           </nav>
         </div>
-        <RoleSwitcher actors={actors} currentActorId={currentActor.id} />
+        <div className="flex items-center gap-3">
+          {isDemo ? (
+            <Link
+              href="/onboarding"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Try with your business
+            </Link>
+          ) : (
+            <form
+              action={returnToDemoAction}
+              className="flex items-center gap-2"
+            >
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium">
+                Your workspace
+              </span>
+              <Button type="submit" variant="ghost" size="sm">
+                Back to demo
+              </Button>
+            </form>
+          )}
+          <RoleSwitcher actors={actors} currentActorId={currentActor.id} />
+        </div>
       </div>
     </header>
   );

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { brandThemeCssVars, getBrandTheme } from "@/lib/branding/theme";
 import { getRepositories } from "@/lib/repositories/singleton";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,9 @@ export default async function RootLayout({
 }: {
   children: ReactNode;
 }) {
-  const business = await getRepositories().business.get();
+  const business = await getRepositories(
+    await getCurrentWorkspaceId(),
+  ).business.get();
   const theme = getBrandTheme(business.id);
 
   return (

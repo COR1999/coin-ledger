@@ -5,13 +5,16 @@
  * behind the same interfaces if needed.
  */
 import type {
+  Actor,
   Business,
+  Obligation,
   PaymentProposal,
   Policies,
   Supplier,
   Transaction,
 } from "@/lib/domain/types";
 import {
+  seedActors,
   seedBusiness,
   seedObligations,
   seedPolicies,
@@ -19,8 +22,10 @@ import {
   seedTransactions,
 } from "@/lib/data/seed";
 import type {
+  ActorRepository,
   BusinessRepository,
   CreateProposalInput,
+  ObligationRepository,
   PaymentProposalRepository,
   PolicyRepository,
   Repositories,
@@ -41,6 +46,26 @@ class InMemoryBusinessRepository implements BusinessRepository {
   async setBalanceCents(cents: number): Promise<Business> {
     this.business = { ...this.business, currentBalanceCents: cents };
     return clone(this.business);
+  }
+}
+
+class InMemoryActorRepository implements ActorRepository {
+  private actors: Actor[];
+  constructor(actors: Actor[]) {
+    this.actors = clone(actors);
+  }
+  async list(): Promise<Actor[]> {
+    return clone(this.actors);
+  }
+}
+
+class InMemoryObligationRepository implements ObligationRepository {
+  private obligations: Obligation[];
+  constructor(obligations: Obligation[]) {
+    this.obligations = clone(obligations);
+  }
+  async list(): Promise<Obligation[]> {
+    return clone(this.obligations);
   }
 }
 
@@ -155,17 +180,38 @@ class InMemoryPaymentProposalRepository implements PaymentProposalRepository {
   }
 }
 
-/** Obligations are static reference data; exposed as a plain accessor. */
-export function getSeedObligations() {
-  return clone(seedObligations);
+export interface RepositorySeedData {
+  business: Business;
+  actors: Actor[];
+  suppliers: Supplier[];
+  transactions: Transaction[];
+  policies: Policies;
+  obligations: Obligation[];
 }
 
-export function createInMemoryRepositories(): Repositories {
+/**
+ * Builds a fresh set of in-memory repositories. With no argument, seeds
+ * Mario's Coffee's demo data (unchanged default, used by every existing
+ * caller and test). Onboarding (Phase 8) passes a visitor's own data instead
+ * — same classes, same interfaces, just different starting state.
+ */
+export function createInMemoryRepositories(
+  data: RepositorySeedData = {
+    business: seedBusiness,
+    actors: seedActors,
+    suppliers: seedSuppliers,
+    transactions: seedTransactions,
+    policies: seedPolicies,
+    obligations: seedObligations,
+  },
+): Repositories {
   return {
-    business: new InMemoryBusinessRepository(seedBusiness),
-    suppliers: new InMemorySupplierRepository(seedSuppliers),
-    transactions: new InMemoryTransactionRepository(seedTransactions),
-    policies: new InMemoryPolicyRepository(seedPolicies),
+    business: new InMemoryBusinessRepository(data.business),
+    actors: new InMemoryActorRepository(data.actors),
+    suppliers: new InMemorySupplierRepository(data.suppliers),
+    transactions: new InMemoryTransactionRepository(data.transactions),
+    policies: new InMemoryPolicyRepository(data.policies),
     proposals: new InMemoryPaymentProposalRepository(),
+    obligations: new InMemoryObligationRepository(data.obligations),
   };
 }

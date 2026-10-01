@@ -1,16 +1,21 @@
 import { AppHeader } from "@/components/app/app-header";
 import { ProposalList } from "@/components/approvals/proposal-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { seedActors } from "@/lib/data/seed";
 import { formatOnChainAmount } from "@/lib/config";
 import { formatEurosDisplay } from "@/lib/money";
-import { getRepositories } from "@/lib/repositories/singleton";
+import {
+  DEMO_WORKSPACE_ID,
+  getRepositories,
+} from "@/lib/repositories/singleton";
 import { getCurrentActor, listActors } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 export default async function ApprovalsPage() {
-  const repos = getRepositories();
-  const [business, actor, proposals] = await Promise.all([
+  const workspaceId = await getCurrentWorkspaceId();
+  const repos = getRepositories(workspaceId);
+  const [business, actors, actor, proposals] = await Promise.all([
     repos.business.get(),
+    listActors(),
     getCurrentActor(),
     repos.proposals.list(),
   ]);
@@ -21,9 +26,9 @@ export default async function ApprovalsPage() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     .map((p) => {
-      const proposer = seedActors.find((a) => a.id === p.proposedByActorId);
+      const proposer = actors.find((a) => a.id === p.proposedByActorId);
       const approver = p.approvedByActorId
-        ? seedActors.find((a) => a.id === p.approvedByActorId)
+        ? actors.find((a) => a.id === p.approvedByActorId)
         : null;
       return {
         id: p.id,
@@ -46,9 +51,10 @@ export default async function ApprovalsPage() {
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
       <AppHeader
         businessName={business.name}
-        actors={listActors()}
+        actors={actors}
         currentActor={actor}
         active="approvals"
+        isDemo={workspaceId === DEMO_WORKSPACE_ID}
       />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">

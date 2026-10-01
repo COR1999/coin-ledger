@@ -3,14 +3,20 @@ import { TransactionTable } from "@/components/dashboard/transaction-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEMO_SCALE_LABEL } from "@/lib/config";
 import { recentTransactions } from "@/lib/finance/dashboard";
-import { getRepositories } from "@/lib/repositories/singleton";
+import {
+  DEMO_WORKSPACE_ID,
+  getRepositories,
+} from "@/lib/repositories/singleton";
 import { getCurrentActor, listActors } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 export default async function TransactionsPage() {
-  const repos = getRepositories();
-  const [business, transactions, actor] = await Promise.all([
+  const workspaceId = await getCurrentWorkspaceId();
+  const repos = getRepositories(workspaceId);
+  const [business, transactions, actors, actor] = await Promise.all([
     repos.business.get(),
     repos.transactions.list(),
+    listActors(),
     getCurrentActor(),
   ]);
 
@@ -20,9 +26,10 @@ export default async function TransactionsPage() {
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
       <AppHeader
         businessName={business.name}
-        actors={listActors()}
+        actors={actors}
         currentActor={actor}
         active="transactions"
+        isDemo={workspaceId === DEMO_WORKSPACE_ID}
       />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">

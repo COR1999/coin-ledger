@@ -8,6 +8,7 @@ import { getPaymentProvider } from "@/lib/payments/provider";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 const requestSchema = z.object({
   messages: z.array(
@@ -17,8 +18,6 @@ const requestSchema = z.object({
     }),
   ),
 });
-
-const provider = getPaymentProvider();
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
@@ -47,8 +46,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { messages } = requestSchema.parse(body);
 
+    const workspaceId = await getCurrentWorkspaceId();
     const actor = await getCurrentActor();
-    const repos = getRepositories();
+    const repos = getRepositories(workspaceId);
+    const provider = getPaymentProvider(workspaceId);
 
     const response = await runAgent(messages as AgentMessage[], actor, repos);
 

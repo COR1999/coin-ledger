@@ -12,21 +12,33 @@ import { SEED_TODAY } from "@/lib/data/seed";
 import { computeAlerts } from "@/lib/finance/alerts";
 import { buildDashboardData } from "@/lib/finance/dashboard";
 import { formatEurosDisplay } from "@/lib/money";
-import { getSeedObligations } from "@/lib/repositories/in-memory";
-import { getRepositories } from "@/lib/repositories/singleton";
+import {
+  DEMO_WORKSPACE_ID,
+  getRepositories,
+} from "@/lib/repositories/singleton";
 import { getCurrentActor, listActors } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 export default async function DashboardPage() {
-  const repos = getRepositories();
-  const [business, suppliers, transactions, policies, actor] =
-    await Promise.all([
-      repos.business.get(),
-      repos.suppliers.list(),
-      repos.transactions.list(),
-      repos.policies.get(),
-      getCurrentActor(),
-    ]);
-  const obligations = getSeedObligations();
+  const workspaceId = await getCurrentWorkspaceId();
+  const repos = getRepositories(workspaceId);
+  const [
+    business,
+    suppliers,
+    transactions,
+    policies,
+    obligations,
+    actors,
+    actor,
+  ] = await Promise.all([
+    repos.business.get(),
+    repos.suppliers.list(),
+    repos.transactions.list(),
+    repos.policies.get(),
+    repos.obligations.list(),
+    listActors(),
+    getCurrentActor(),
+  ]);
 
   const data = buildDashboardData({
     business,
@@ -51,9 +63,10 @@ export default async function DashboardPage() {
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
       <AppHeader
         businessName={business.name}
-        actors={listActors()}
+        actors={actors}
         currentActor={actor}
         active="dashboard"
+        isDemo={workspaceId === DEMO_WORKSPACE_ID}
       />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">

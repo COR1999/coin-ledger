@@ -7,10 +7,9 @@ import { executePayment } from "@/lib/payments/execute";
 import { getPaymentProvider } from "@/lib/payments/provider";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 const proposalIdSchema = z.string().min(1);
-
-const provider = getPaymentProvider();
 
 export interface ActionResult {
   success: boolean;
@@ -25,8 +24,10 @@ export async function approveProposal(
 ): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
+    const workspaceId = await getCurrentWorkspaceId();
     const actor = await getCurrentActor();
-    const repos = getRepositories();
+    const repos = getRepositories(workspaceId);
+    const provider = getPaymentProvider(workspaceId);
 
     const proposal = await repos.proposals.getById(proposalId);
     if (!proposal) {
@@ -113,8 +114,10 @@ export async function confirmProposal(
 ): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
+    const workspaceId = await getCurrentWorkspaceId();
     const actor = await getCurrentActor();
-    const repos = getRepositories();
+    const repos = getRepositories(workspaceId);
+    const provider = getPaymentProvider(workspaceId);
 
     const proposal = await repos.proposals.getById(proposalId);
     if (!proposal) {
@@ -195,8 +198,10 @@ export async function confirmProposal(
 export async function retryPayment(proposalId: string): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
+    const workspaceId = await getCurrentWorkspaceId();
     const actor = await getCurrentActor();
-    const repos = getRepositories();
+    const repos = getRepositories(workspaceId);
+    const provider = getPaymentProvider(workspaceId);
 
     const proposal = await repos.proposals.getById(proposalId);
     if (!proposal) {
@@ -278,7 +283,7 @@ export async function rejectProposal(
 ): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
-    const repos = getRepositories();
+    const repos = getRepositories(await getCurrentWorkspaceId());
 
     const proposal = await repos.proposals.getById(proposalId);
     if (!proposal) {

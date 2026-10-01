@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { SEED_TODAY } from "@/lib/data/seed";
 import type { Repositories } from "@/lib/repositories/types";
-import { getSeedObligations } from "@/lib/repositories/in-memory";
 import {
   forecast30Day,
   safeToSpendCents,
@@ -116,14 +115,13 @@ async function buildBusinessState(
   repos: Repositories,
   actorId: string,
 ): Promise<PolicyBusinessState> {
-  const [business, todaySpentByBusiness, todaySpentByActor] = await Promise.all(
-    [
+  const [business, todaySpentByBusiness, todaySpentByActor, obligations] =
+    await Promise.all([
       repos.business.get(),
       repos.transactions.spentOnDateCents(SEED_TODAY),
       repos.transactions.spentOnDateByActorCents(SEED_TODAY, actorId),
-    ],
-  );
-  const obligations = getSeedObligations();
+      repos.obligations.list(),
+    ]);
   const obligationsNext30Days = upcomingObligationsCents(
     obligations,
     SEED_TODAY,
@@ -146,11 +144,11 @@ export async function executeTool(
 ): Promise<string> {
   switch (toolName) {
     case "getBalance": {
-      const [business, policies] = await Promise.all([
+      const [business, policies, obligations] = await Promise.all([
         repos.business.get(),
         repos.policies.get(),
+        repos.obligations.list(),
       ]);
-      const obligations = getSeedObligations();
       const obligationsTotal = upcomingObligationsCents(
         obligations,
         SEED_TODAY,
@@ -172,7 +170,7 @@ export async function executeTool(
     }
 
     case "getObligations": {
-      const obligations = getSeedObligations();
+      const obligations = await repos.obligations.list();
       const upcoming = obligations
         .filter((o) => o.dueDate >= SEED_TODAY)
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -187,8 +185,10 @@ export async function executeTool(
     }
 
     case "getForecast": {
-      const business = await repos.business.get();
-      const obligations = getSeedObligations();
+      const [business, obligations] = await Promise.all([
+        repos.business.get(),
+        repos.obligations.list(),
+      ]);
       const fc = forecast30Day(business, obligations, SEED_TODAY);
       return JSON.stringify({
         startingBalance: formatEuros(fc.startingBalanceCents),

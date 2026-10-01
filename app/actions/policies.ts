@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 import {
   applyPolicyForm,
   policyFormSchema,
@@ -37,7 +38,7 @@ export async function updatePoliciesAction(
   _prev: PolicyUpdateResult,
   formData: FormData,
 ): Promise<PolicyUpdateResult> {
-  const repos = getRepositories();
+  const repos = getRepositories(await getCurrentWorkspaceId());
   const [actor, policies] = await Promise.all([
     getCurrentActor(),
     repos.policies.get(),

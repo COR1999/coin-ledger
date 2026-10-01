@@ -2,13 +2,20 @@ import { AppHeader } from "@/components/app/app-header";
 import { PolicyForm } from "@/components/settings/policy-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { policiesToForm } from "@/lib/policy/settings";
-import { getRepositories } from "@/lib/repositories/singleton";
+import {
+  DEMO_WORKSPACE_ID,
+  getRepositories,
+} from "@/lib/repositories/singleton";
 import { getCurrentActor, listActors } from "@/lib/session";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 export default async function SettingsPage() {
-  const repos = getRepositories();
-  const [policies, actor] = await Promise.all([
+  const workspaceId = await getCurrentWorkspaceId();
+  const repos = getRepositories(workspaceId);
+  const [business, policies, actors, actor] = await Promise.all([
+    repos.business.get(),
     repos.policies.get(),
+    listActors(),
     getCurrentActor(),
   ]);
 
@@ -18,10 +25,11 @@ export default async function SettingsPage() {
   return (
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
       <AppHeader
-        businessName="Mario's Coffee"
-        actors={listActors()}
+        businessName={business.name}
+        actors={actors}
         currentActor={actor}
         active="settings"
+        isDemo={workspaceId === DEMO_WORKSPACE_ID}
       />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">

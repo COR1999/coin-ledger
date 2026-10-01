@@ -5,7 +5,9 @@
  * business logic.
  */
 import type {
+  Actor,
   Business,
+  Obligation,
   PaymentProposal,
   Policies,
   Supplier,
@@ -15,6 +17,21 @@ import type {
 export interface BusinessRepository {
   get(): Promise<Business>;
   setBalanceCents(cents: number): Promise<Business>;
+}
+
+/** Actors are fixed per workspace (no sign-up flow), so read-only. */
+export interface ActorRepository {
+  list(): Promise<Actor[]>;
+}
+
+/**
+ * Read-only reference data. The demo workspace serves Mario's Coffee's seed
+ * bills; a workspace created via onboarding (Phase 8) has none, since the
+ * wizard doesn't collect them — showing Mario's Coffee's bills on a
+ * visitor's own dashboard would be actively misleading, not just unfinished.
+ */
+export interface ObligationRepository {
+  list(): Promise<Obligation[]>;
 }
 
 export interface SupplierRepository {
@@ -77,8 +94,10 @@ export interface PaymentProposalRepository {
 
 export interface Repositories {
   business: BusinessRepository;
+  actors: ActorRepository;
   suppliers: SupplierRepository;
   transactions: TransactionRepository;
   policies: PolicyRepository;
   proposals: PaymentProposalRepository;
+  obligations: ObligationRepository;
 }
