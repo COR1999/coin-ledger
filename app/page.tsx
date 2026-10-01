@@ -1,17 +1,26 @@
-import { ArrowRight, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { ShieldCheck, Sparkles, Zap } from "lucide-react";
 import Link from "next/link";
 
 import { returnToDemoAction } from "@/app/actions/onboarding";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DemoCtaButton } from "@/components/marketing/demo-cta-button";
 import { WaitlistForm } from "@/components/marketing/waitlist-form";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DEMO_WORKSPACE_ID } from "@/lib/repositories/singleton";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 /**
  * Public marketing landing page. The product itself lives at /app (the
  * dashboard) — this route exists so a cold visitor at the root domain gets a
  * pitch and a choice, not straight into someone else's business data.
  */
-export default function LandingPage() {
+export default async function LandingPage() {
+  // A visitor who already completed onboarding (Phase 8) and revisits "/"
+  // shouldn't be funneled toward "Try the demo" — that overwrites their
+  // workspace cookie back to the demo. Give them a direct way back instead.
+  const workspaceId = await getCurrentWorkspaceId();
+  const hasOwnWorkspace = workspaceId !== DEMO_WORKSPACE_ID;
+
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b bg-background">
@@ -50,23 +59,40 @@ export default function LandingPage() {
             independently verify — not just an entry in a database you&apos;re
             asked to trust.
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <form action={returnToDemoAction}>
-              <Button type="submit" size="lg">
-                Try the demo <ArrowRight className="size-4" />
-              </Button>
-            </form>
-            <Link
-              href="/onboarding"
-              className={buttonVariants({ variant: "outline", size: "lg" })}
-            >
-              Try with your business
-            </Link>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            No signup, no wallet, no real money — the demo and your own
-            workspace both run on testnet, free to explore.
-          </p>
+          {hasOwnWorkspace ? (
+            <>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link href="/app" className={buttonVariants({ size: "lg" })}>
+                  Continue to your workspace
+                </Link>
+                <form action={returnToDemoAction}>
+                  <DemoCtaButton />
+                </form>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                You already set up a business here — pick up where you left off,
+                or switch to the canned demo.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <form action={returnToDemoAction}>
+                  <DemoCtaButton />
+                </form>
+                <Link
+                  href="/onboarding"
+                  className={buttonVariants({ variant: "outline", size: "lg" })}
+                >
+                  Try with your business
+                </Link>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                No signup, no wallet, no real money — the demo and your own
+                workspace both run on testnet, free to explore.
+              </p>
+            </>
+          )}
         </section>
 
         {/* Value props */}

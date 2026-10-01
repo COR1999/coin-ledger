@@ -41,7 +41,22 @@ export function RoleSwitcher({
               startTransition(() => selectActorAction(formData))
             }
           >
-            <input type="hidden" name="actorId" value={actor.id} />
+            {/*
+              suppressHydrationWarning: browser password-manager extensions
+              (1Password, Bitwarden, etc.) inject a `style="caret-color:
+              transparent"` onto input elements before React hydrates —
+              explicitly named as a known cause in React's own
+              hydration-mismatch message. Nothing in this component is
+              non-deterministic (no Date.now(), no window check, no locale
+              formatting), so this isn't masking a real bug; it only
+              suppresses the warning for this element's own attributes.
+            */}
+            <input
+              type="hidden"
+              name="actorId"
+              value={actor.id}
+              suppressHydrationWarning
+            />
             <button
               type="submit"
               aria-pressed={active}

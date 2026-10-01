@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { mapZodFieldErrors } from "@/lib/forms/field-errors";
 import { createWorkspace, onboardingInputSchema } from "@/lib/onboarding";
 import { DEMO_WORKSPACE_ID } from "@/lib/repositories/singleton";
 import { setCurrentWorkspaceId } from "@/lib/workspace";
@@ -41,15 +42,15 @@ export async function createWorkspaceAction(
   });
 
   if (!parsed.success) {
-    const fieldErrors: OnboardingResult["fieldErrors"] = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path[0];
-      if (key === "businessName" || key === "ownerName") {
-        fieldErrors[key] ??= issue.message;
-      } else if (key === "suppliers") {
-        fieldErrors.suppliers ??=
-          "Add at least one supplier (name and category).";
-      }
+    const fieldErrors = mapZodFieldErrors(parsed.error.issues, [
+      "businessName",
+      "ownerName",
+      "suppliers",
+    ] as const);
+    // Override the array-level zod message with one that names the actual
+    // requirement — "suppliers" has no per-field zod message worth showing.
+    if (fieldErrors.suppliers) {
+      fieldErrors.suppliers = "Add at least one supplier (name and category).";
     }
     return {
       status: "error",

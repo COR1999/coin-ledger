@@ -7,6 +7,7 @@ import {
   type OnboardingResult,
 } from "@/app/actions/onboarding";
 import { Button } from "@/components/ui/button";
+import { inputClass, TextField } from "@/components/ui/field";
 
 const INITIAL: OnboardingResult = { status: "idle" };
 
@@ -22,38 +23,24 @@ export function OnboardingForm() {
   return (
     <form action={formAction} className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field
+        <TextField
           id="businessName"
+          name="businessName"
           label="Your business name"
+          required
+          maxLength={80}
+          placeholder="e.g. Riverside Bakery"
           error={state.fieldErrors?.businessName}
-        >
-          <input
-            id="businessName"
-            name="businessName"
-            type="text"
-            required
-            maxLength={80}
-            placeholder="e.g. Riverside Bakery"
-            aria-invalid={state.fieldErrors?.businessName ? true : undefined}
-            className={inputClass}
-          />
-        </Field>
-        <Field
+        />
+        <TextField
           id="ownerName"
+          name="ownerName"
           label="Your name"
+          required
+          maxLength={60}
+          placeholder="e.g. Sam"
           error={state.fieldErrors?.ownerName}
-        >
-          <input
-            id="ownerName"
-            name="ownerName"
-            type="text"
-            required
-            maxLength={60}
-            placeholder="e.g. Sam"
-            aria-invalid={state.fieldErrors?.ownerName ? true : undefined}
-            className={inputClass}
-          />
-        </Field>
+        />
       </div>
 
       <fieldset className="space-y-3">
@@ -120,30 +107,5 @@ export function OnboardingForm() {
         </p>
       </div>
     </form>
-  );
-}
-
-const inputClass =
-  "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive";
-
-function Field({
-  id,
-  label,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </div>
   );
 }

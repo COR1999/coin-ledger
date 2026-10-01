@@ -1,12 +1,15 @@
 "use server";
 
 import { waitlistSignupInputSchema } from "@/lib/domain/types";
+import { mapZodFieldErrors } from "@/lib/forms/field-errors";
 import { addWaitlistSignup } from "@/lib/repositories/waitlist";
 
 export interface WaitlistResult {
   status: "idle" | "success" | "error";
   message?: string;
-  fieldErrors?: Partial<Record<"name" | "email" | "businessType", string>>;
+  fieldErrors?: Partial<
+    Record<"name" | "email" | "businessType" | "note", string>
+  >;
 }
 
 export async function joinWaitlistAction(
@@ -22,13 +25,12 @@ export async function joinWaitlistAction(
 
   const parsed = waitlistSignupInputSchema.safeParse(raw);
   if (!parsed.success) {
-    const fieldErrors: WaitlistResult["fieldErrors"] = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path[0];
-      if (key === "name" || key === "email" || key === "businessType") {
-        fieldErrors[key] ??= issue.message;
-      }
-    }
+    const fieldErrors = mapZodFieldErrors(parsed.error.issues, [
+      "name",
+      "email",
+      "businessType",
+      "note",
+    ] as const);
     return {
       status: "error",
       message: "Some values need fixing.",
