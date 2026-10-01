@@ -11,7 +11,7 @@ import { toolDefinitions, executeTool } from "./tools";
 import { formatEuros } from "@/lib/money";
 
 const MAX_ITERATIONS = 10;
-const MODEL = "gemini-3.5-flash";
+const MODEL = "gemini-3.6-flash";
 const MAX_RETRIES = 4;
 const BASE_BACKOFF_MS = 1000;
 
