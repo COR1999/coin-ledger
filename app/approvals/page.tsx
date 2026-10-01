@@ -65,10 +65,7 @@ export default async function ApprovalsPage() {
             <CardTitle>All proposals</CardTitle>
           </CardHeader>
           <CardContent>
-            <ProposalList
-              proposals={enriched}
-              currentActorRole={actor.role}
-            />
+            <ProposalList proposals={enriched} currentActorRole={actor.role} />
           </CardContent>
         </Card>
       </main>

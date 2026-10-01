@@ -97,17 +97,22 @@ export async function executePayment(
     );
   }
 
-  const [business, supplier, policies, todaySpentByBusiness, todaySpentByActor] =
-    await Promise.all([
-      repos.business.get(),
-      repos.suppliers.getById(proposal.supplierId),
-      repos.policies.get(),
-      repos.transactions.spentOnDateCents(SEED_TODAY),
-      repos.transactions.spentOnDateByActorCents(
-        SEED_TODAY,
-        proposal.proposedByActorId,
-      ),
-    ]);
+  const [
+    business,
+    supplier,
+    policies,
+    todaySpentByBusiness,
+    todaySpentByActor,
+  ] = await Promise.all([
+    repos.business.get(),
+    repos.suppliers.getById(proposal.supplierId),
+    repos.policies.get(),
+    repos.transactions.spentOnDateCents(SEED_TODAY),
+    repos.transactions.spentOnDateByActorCents(
+      SEED_TODAY,
+      proposal.proposedByActorId,
+    ),
+  ]);
 
   if (!supplier) {
     throw new ExecutionError(

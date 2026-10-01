@@ -122,7 +122,9 @@ export function recentTransactions(
   limit = 12,
 ): Transaction[] {
   return [...transactions]
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+    )
     .slice(0, limit);
 }
 

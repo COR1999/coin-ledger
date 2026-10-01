@@ -44,13 +44,13 @@ policy state.
 
 ### Layers
 
-| Layer | Where | Responsibility |
-| --- | --- | --- |
-| Finance + policy engines | `lib/finance/`, `lib/policy/` | Pure functions: safe-to-spend, forecast, policy decisions. No I/O. |
-| Repositories | `lib/repositories/` | Data-access interfaces + an in-memory implementation, seeded from `lib/data/seed.ts`. Swappable for a database. |
-| Agent | `lib/agent/` | Gemini-backed finance agent. 5 read-only tools + `proposePayment`. Never signs or executes. |
-| Execution | `lib/payments/` | `execute.ts` (the one path that moves money), `PaymentProvider` (mock / Arc), idempotency key derivation. |
-| UI | `app/`, `components/` | Dashboard, chat, approvals, transaction history, policy settings. Role-aware server-side. |
+| Layer                    | Where                         | Responsibility                                                                                                  |
+| ------------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Finance + policy engines | `lib/finance/`, `lib/policy/` | Pure functions: safe-to-spend, forecast, policy decisions. No I/O.                                              |
+| Repositories             | `lib/repositories/`           | Data-access interfaces + an in-memory implementation, seeded from `lib/data/seed.ts`. Swappable for a database. |
+| Agent                    | `lib/agent/`                  | Gemini-backed finance agent. 5 read-only tools + `proposePayment`. Never signs or executes.                     |
+| Execution                | `lib/payments/`               | `execute.ts` (the one path that moves money), `PaymentProvider` (mock / Arc), idempotency key derivation.       |
+| UI                       | `app/`, `components/`         | Dashboard, chat, approvals, transaction history, policy settings. Role-aware server-side.                       |
 
 ## Stack
 
@@ -78,28 +78,28 @@ All variables are validated server-side at startup by `lib/env.ts`
 and are never committed; `.env*` is gitignored. Testnet uses disposable
 wallets only.
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `PAYMENT_PROVIDER` | No (`mock` default) | `mock` settles fake payments locally with a 10% simulated failure rate; `arc` executes real transfers on Arc testnet via Circle. |
-| `GOOGLE_API_KEY` | Yes | Gemini key for the finance agent. |
-| `CHAT_RATE_LIMIT_PER_HOUR` | No (`10` default) | Max chat messages per visitor (by IP) per hour on a public deployment — protects the shared Gemini free-tier quota. In-memory, so it's a soft limit on serverless platforms (see `lib/rate-limit.ts`), not a hard guarantee. |
-| `CIRCLE_API_KEY` | Only if `PAYMENT_PROVIDER=arc` | Circle developer-controlled wallets API key. |
-| `CIRCLE_ENTITY_SECRET` | Only if `PAYMENT_PROVIDER=arc` | Circle entity secret for wallet operations. |
-| `CIRCLE_WALLET_ADDRESS` | Only if `PAYMENT_PROVIDER=arc` | The business's Circle-managed wallet address (created via `scripts/create-arc-wallet.ts`). |
-| `ARC_RPC_URL` | No | Arc RPC endpoint from `arc-canteen rpc-url`. Contains a Canteen token — treat as a secret. Not currently used for execution (Circle's API is called directly); kept for traction tracking. |
-| `ARC_PRIVATE_KEY` | No | Unused — the confirmed architecture is Circle developer-controlled wallets, not a raw-key wallet. Left for reference only. |
+| Variable                   | Required                       | Purpose                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAYMENT_PROVIDER`         | No (`mock` default)            | `mock` settles fake payments locally with a 10% simulated failure rate; `arc` executes real transfers on Arc testnet via Circle.                                                                                             |
+| `GOOGLE_API_KEY`           | Yes                            | Gemini key for the finance agent.                                                                                                                                                                                            |
+| `CHAT_RATE_LIMIT_PER_HOUR` | No (`10` default)              | Max chat messages per visitor (by IP) per hour on a public deployment — protects the shared Gemini free-tier quota. In-memory, so it's a soft limit on serverless platforms (see `lib/rate-limit.ts`), not a hard guarantee. |
+| `CIRCLE_API_KEY`           | Only if `PAYMENT_PROVIDER=arc` | Circle developer-controlled wallets API key.                                                                                                                                                                                 |
+| `CIRCLE_ENTITY_SECRET`     | Only if `PAYMENT_PROVIDER=arc` | Circle entity secret for wallet operations.                                                                                                                                                                                  |
+| `CIRCLE_WALLET_ADDRESS`    | Only if `PAYMENT_PROVIDER=arc` | The business's Circle-managed wallet address (created via `scripts/create-arc-wallet.ts`).                                                                                                                                   |
+| `ARC_RPC_URL`              | No                             | Arc RPC endpoint from `arc-canteen rpc-url`. Contains a Canteen token — treat as a secret. Not currently used for execution (Circle's API is called directly); kept for traction tracking.                                   |
+| `ARC_PRIVATE_KEY`          | No                             | Unused — the confirmed architecture is Circle developer-controlled wallets, not a raw-key wallet. Left for reference only.                                                                                                   |
 
 ## Scripts
 
 | Script                 | Purpose                     |
-| ----------------------- | --------------------------- |
+| ---------------------- | --------------------------- |
 | `npm run dev`          | Start the dev server        |
 | `npm run build`        | Production build            |
 | `npm run lint`         | ESLint                      |
 | `npm run typecheck`    | `tsc --noEmit`              |
 | `npm run test`         | Vitest (single run)         |
-| `npm run test:watch`   | Vitest (watch)               |
-| `npm run format`       | Prettier write               |
+| `npm run test:watch`   | Vitest (watch)              |
+| `npm run format`       | Prettier write              |
 | `npm run format:check` | Prettier check (used in CI) |
 
 ## Testing

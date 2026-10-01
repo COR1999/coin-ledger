@@ -293,9 +293,7 @@ describe("executePayment", () => {
       maxAttempts: 1,
     });
     expect(firstAttempt.status).toBe("failed");
-    expect((await repos.proposals.getById(proposal.id))!.status).toBe(
-      "failed",
-    );
+    expect((await repos.proposals.getById(proposal.id))!.status).toBe("failed");
 
     // Retrying calls executePayment again on the now-"failed" proposal —
     // previously blocked by INVALID_STATUS; retry is the one caller allowed

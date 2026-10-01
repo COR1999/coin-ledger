@@ -116,12 +116,13 @@ async function buildBusinessState(
   repos: Repositories,
   actorId: string,
 ): Promise<PolicyBusinessState> {
-  const [business, todaySpentByBusiness, todaySpentByActor] =
-    await Promise.all([
+  const [business, todaySpentByBusiness, todaySpentByActor] = await Promise.all(
+    [
       repos.business.get(),
       repos.transactions.spentOnDateCents(SEED_TODAY),
       repos.transactions.spentOnDateByActorCents(SEED_TODAY, actorId),
-    ]);
+    ],
+  );
   const obligations = getSeedObligations();
   const obligationsNext30Days = upcomingObligationsCents(
     obligations,
@@ -201,7 +202,9 @@ export async function executeTool(
       const input = getSupplierSchema.parse(rawInput);
       const supplier = await repos.suppliers.getById(input.supplierId);
       if (!supplier) {
-        return JSON.stringify({ error: `Supplier "${input.supplierId}" not found` });
+        return JSON.stringify({
+          error: `Supplier "${input.supplierId}" not found`,
+        });
       }
       return JSON.stringify({
         id: supplier.id,
@@ -225,7 +228,9 @@ export async function executeTool(
       const amountCents = parseAmountToCents(input.amount);
       const supplier = await repos.suppliers.getById(input.supplierId);
       if (!supplier) {
-        return JSON.stringify({ error: `Supplier "${input.supplierId}" not found` });
+        return JSON.stringify({
+          error: `Supplier "${input.supplierId}" not found`,
+        });
       }
       const [policies, businessState] = await Promise.all([
         repos.policies.get(),
@@ -251,7 +256,9 @@ export async function executeTool(
       const amountCents = parseAmountToCents(input.amount);
       const supplier = await repos.suppliers.getById(input.supplierId);
       if (!supplier) {
-        return JSON.stringify({ error: `Supplier "${input.supplierId}" not found` });
+        return JSON.stringify({
+          error: `Supplier "${input.supplierId}" not found`,
+        });
       }
       const [policies, businessState] = await Promise.all([
         repos.policies.get(),

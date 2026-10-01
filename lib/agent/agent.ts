@@ -199,12 +199,7 @@ export async function runAgent(
     for (const call of functionCalls) {
       const name = call.name ?? "";
       try {
-        const result = await executeTool(
-          name,
-          call.args ?? {},
-          repos,
-          actor,
-        );
+        const result = await executeTool(name, call.args ?? {}, repos, actor);
 
         const parsed = JSON.parse(result);
         if (parsed.proposalId) {

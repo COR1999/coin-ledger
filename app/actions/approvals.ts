@@ -192,9 +192,7 @@ export async function confirmProposal(
   }
 }
 
-export async function retryPayment(
-  proposalId: string,
-): Promise<ActionResult> {
+export async function retryPayment(proposalId: string): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
     const actor = await getCurrentActor();

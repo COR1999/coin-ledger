@@ -45,7 +45,10 @@ export function AppHeader({
               </p>
             </div>
           </div>
-          <nav aria-label="Primary" className="flex flex-wrap items-center gap-1">
+          <nav
+            aria-label="Primary"
+            className="flex flex-wrap items-center gap-1"
+          >
             <NavLink href="/" current={active === "dashboard"}>
               Dashboard
             </NavLink>
@@ -55,10 +58,7 @@ export function AppHeader({
             <NavLink href="/approvals" current={active === "approvals"}>
               Approvals
             </NavLink>
-            <NavLink
-              href="/transactions"
-              current={active === "transactions"}
-            >
+            <NavLink href="/transactions" current={active === "transactions"}>
               Transactions
             </NavLink>
             <NavLink href="/settings" current={active === "settings"}>

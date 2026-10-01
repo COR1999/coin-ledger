@@ -172,9 +172,9 @@ export function ProposalList({
             !p.txHash &&
             actionState[p.id]?.status !== "error" && (
               <p className="mt-2 text-xs text-amber-600">
-                This payment was approved but never executed — the request
-                that should have submitted it was interrupted. Retry to
-                submit it now.
+                This payment was approved but never executed — the request that
+                should have submitted it was interrupted. Retry to submit it
+                now.
               </p>
             )}
 

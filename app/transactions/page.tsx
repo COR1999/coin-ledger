@@ -29,9 +29,9 @@ export default async function TransactionsPage() {
         <div className="mb-6">
           <h1 className="text-xl font-semibold">Transaction history</h1>
           <p className="text-sm text-muted-foreground">
-            Every recorded transaction for {business.name}. Payments settled
-            on Arc testnet show their on-chain amount, linked to the
-            explorer — {DEMO_SCALE_LABEL}.
+            Every recorded transaction for {business.name}. Payments settled on
+            Arc testnet show their on-chain amount, linked to the explorer —{" "}
+            {DEMO_SCALE_LABEL}.
           </p>
         </div>
 
