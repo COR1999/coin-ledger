@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { ONCHAIN_SCALE, toOnChainAmount } from "./config";
+import {
+  arcExplorerTxUrl,
+  DEMO_SCALE_LABEL,
+  formatOnChainAmount,
+  ONCHAIN_SCALE,
+  toOnChainAmount,
+} from "./config";
+import { eur } from "@/lib/money";
 
 describe("toOnChainAmount", () => {
   it("scales down by ONCHAIN_SCALE", () => {
@@ -22,5 +29,26 @@ describe("toOnChainAmount", () => {
 
   it("rejects a non-numeric amount", () => {
     expect(() => toOnChainAmount("abc")).toThrow(/Invalid EUR amount/);
+  });
+});
+
+describe("formatOnChainAmount", () => {
+  it("formats integer cents as an EURC display string", () => {
+    expect(formatOnChainAmount(eur(2_400))).toBe("2.4 EURC");
+    expect(formatOnChainAmount(eur(30))).toBe("0.03 EURC");
+  });
+});
+
+describe("DEMO_SCALE_LABEL", () => {
+  it("matches the label required by docs/spec/payments.md", () => {
+    expect(DEMO_SCALE_LABEL).toBe("Testnet · 1:1,000 demo scale");
+  });
+});
+
+describe("arcExplorerTxUrl", () => {
+  it("builds a testnet explorer link for a tx hash", () => {
+    expect(arcExplorerTxUrl("0xabc")).toBe(
+      "https://testnet.arcscan.app/tx/0xabc",
+    );
   });
 });

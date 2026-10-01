@@ -2,6 +2,7 @@ import { AppHeader } from "@/components/app/app-header";
 import { ProposalList } from "@/components/approvals/proposal-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { seedActors } from "@/lib/data/seed";
+import { formatOnChainAmount } from "@/lib/config";
 import { formatEurosDisplay } from "@/lib/money";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor, listActors } from "@/lib/session";
@@ -35,6 +36,8 @@ export default async function ApprovalsPage() {
         requiredApproverRole: p.requiredApproverRole ?? null,
         requiresConfirmation: p.requiresConfirmation,
         approvedBy: approver?.name ?? null,
+        txHash: p.txHash ?? null,
+        onChainAmount: p.txHash ? formatOnChainAmount(p.amountCents) : null,
       };
     });
 

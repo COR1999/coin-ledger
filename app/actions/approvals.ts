@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { DEMO_SCALE_LABEL } from "@/lib/config";
 import { evaluateApproval } from "@/lib/policy/engine";
 import { executePayment } from "@/lib/payments/execute";
 import { getPaymentProvider } from "@/lib/payments/provider";
@@ -16,6 +17,7 @@ export interface ActionResult {
   message: string;
   proposalId?: string;
   txHash?: string;
+  onChainAmount?: string;
 }
 
 export async function approveProposal(
@@ -67,9 +69,10 @@ export async function approveProposal(
         if (result.status === "confirmed") {
           return {
             success: true,
-            message: `Payment approved and executed. Tx: ${result.txHash}`,
+            message: `Payment approved and executed on-chain: ${result.onChainAmount} (${DEMO_SCALE_LABEL}). Tx: ${result.txHash}`,
             proposalId,
             txHash: result.txHash,
+            onChainAmount: result.onChainAmount,
           };
         } else if (result.status === "failed") {
           return {
@@ -138,9 +141,10 @@ export async function confirmProposal(
       if (result.status === "confirmed") {
         return {
           success: true,
-          message: `Payment confirmed and executed. Tx: ${result.txHash}`,
+          message: `Payment confirmed and executed on-chain: ${result.onChainAmount} (${DEMO_SCALE_LABEL}). Tx: ${result.txHash}`,
           proposalId,
           txHash: result.txHash,
+          onChainAmount: result.onChainAmount,
         };
       } else if (result.status === "failed") {
         return {

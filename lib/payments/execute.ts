@@ -1,3 +1,4 @@
+import { formatOnChainAmount } from "@/lib/config";
 import { SEED_TODAY, seedActors } from "@/lib/data/seed";
 import type { PaymentProposal } from "@/lib/domain/types";
 import { upcomingObligationsCents } from "@/lib/finance/engine";
@@ -6,7 +7,17 @@ import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
 import { getSeedObligations } from "@/lib/repositories/in-memory";
 import type { Repositories } from "@/lib/repositories/types";
 import { deterministicIdempotencyKey } from "./idempotency";
-import type { PaymentProvider } from "./types";
+import type { PaymentProvider, PaymentStatus } from "./types";
+
+/**
+ * MockPaymentProvider settles in ~1s, but real Arc/Circle confirmations lag
+ * behind chain finality — BUILD_LOG's own disposable verification transfer
+ * needed a ~3s poll. A single fixed-delay check left real payments stuck in
+ * "executing" forever once confirmation took longer than the wait. Poll
+ * instead, up to ~20s, before giving up.
+ */
+const STATUS_POLL_INTERVAL_MS = 1500;
+const STATUS_POLL_MAX_ATTEMPTS = 13;
 
 export class ExecutionError extends Error {
   constructor(
@@ -32,14 +43,24 @@ export interface ExecutionResult {
   paymentId: string;
   status: "pending" | "confirmed" | "failed";
   txHash?: string;
+  /** e.g. "2.4 EURC" — always shown next to DEMO_SCALE_LABEL, never bare. */
+  onChainAmount: string;
   failureReason?: string;
+}
+
+export interface StatusPollOptions {
+  intervalMs?: number;
+  maxAttempts?: number;
 }
 
 export async function executePayment(
   proposalId: string,
   repos: Repositories,
   provider: PaymentProvider,
+  pollOptions: StatusPollOptions = {},
 ): Promise<ExecutionResult> {
+  const pollIntervalMs = pollOptions.intervalMs ?? STATUS_POLL_INTERVAL_MS;
+  const pollMaxAttempts = pollOptions.maxAttempts ?? STATUS_POLL_MAX_ATTEMPTS;
   const proposal = await repos.proposals.getById(proposalId);
   if (!proposal) {
     throw new ExecutionError(`Proposal ${proposalId} not found`, "NOT_FOUND");
@@ -164,7 +185,9 @@ export async function executePayment(
 
   await repos.proposals.update(proposalId, { status: "executing" });
 
-  const idempotencyKey = deterministicIdempotencyKey(`proposal-${proposalId}`);
+  const idempotencyKey = deterministicIdempotencyKey(
+    `proposal-${proposalId}-${proposal.createdAt}`,
+  );
 
   try {
     const submitResult = await provider.submit({
@@ -178,8 +201,12 @@ export async function executePayment(
       paymentId: submitResult.paymentId,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    const status = await provider.getStatus(submitResult.paymentId);
+    let status: PaymentStatus = { status: "pending" };
+    for (let attempt = 0; attempt < pollMaxAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      status = await provider.getStatus(submitResult.paymentId);
+      if (status.status !== "pending") break;
+    }
 
     if (status.status === "confirmed") {
       await repos.proposals.update(proposalId, {
@@ -210,6 +237,7 @@ export async function executePayment(
       paymentId: submitResult.paymentId,
       status: status.status,
       txHash: status.txHash,
+      onChainAmount: formatOnChainAmount(proposal.amountCents),
       failureReason: status.failureReason,
     };
   } catch (error) {

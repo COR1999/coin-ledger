@@ -73,7 +73,10 @@ describe("executePayment", () => {
     const proposal = await createApprovedProposal(repos);
     const provider = createMockProvider();
 
-    const result = await executePayment(proposal.id, repos, provider);
+    const result = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
 
     expect(result.status).toBe("confirmed");
     expect(result.txHash).toBe("0xabc");
@@ -219,7 +222,10 @@ describe("executePayment", () => {
       },
     });
 
-    const result = await executePayment(proposal.id, repos, provider);
+    const result = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
 
     expect(result.status).toBe("failed");
     expect(result.failureReason).toBe("Insufficient gas");
@@ -231,13 +237,16 @@ describe("executePayment", () => {
     expect(business.currentBalanceCents).toBe(eur(18_420));
   });
 
-  it("handles a pending provider payment", async () => {
+  it("handles a pending provider payment (gives up after exhausting polls)", async () => {
     const proposal = await createApprovedProposal(repos);
     const provider = createMockProvider({
       statusResult: { status: "pending" },
     });
 
-    const result = await executePayment(proposal.id, repos, provider);
+    const result = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 2,
+    });
 
     expect(result.status).toBe("pending");
     expect(result.paymentId).toBe("pay-1");
@@ -255,7 +264,10 @@ describe("executePayment", () => {
     });
     const provider = createMockProvider();
 
-    const result = await executePayment(proposal.id, repos, provider);
+    const result = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
 
     expect(result.status).toBe("confirmed");
     expect(result.txHash).toBe("0xabc");
@@ -267,7 +279,10 @@ describe("executePayment", () => {
     });
     const provider = createMockProvider();
 
-    await executePayment(proposal.id, repos, provider);
+    await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
 
     const business = await repos.business.get();
     expect(business.currentBalanceCents).toBe(eur(18_420) - eur(50));

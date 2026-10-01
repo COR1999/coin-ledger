@@ -8,6 +8,7 @@ import {
   confirmProposal,
   rejectProposal,
 } from "@/app/actions/approvals";
+import { arcExplorerTxUrl, DEMO_SCALE_LABEL } from "@/lib/config";
 
 interface Proposal {
   id: string;
@@ -20,6 +21,15 @@ interface Proposal {
   requiredApproverRole: string | null;
   requiresConfirmation: boolean;
   approvedBy: string | null;
+  txHash: string | null;
+  onChainAmount: string | null;
+}
+
+interface ActionState {
+  status: "loading" | "done" | "error";
+  errorMessage?: string;
+  txHash?: string;
+  onChainAmount?: string;
 }
 
 function statusLabel(status: string): string {
@@ -71,13 +81,15 @@ export function ProposalList({
   currentActorRole: string;
 }) {
   const router = useRouter();
-  const [actionState, setActionState] = useState<Record<string, string>>({});
+  const [actionState, setActionState] = useState<Record<string, ActionState>>(
+    {},
+  );
 
   async function handleAction(
     proposalId: string,
     action: "approve" | "confirm" | "reject",
   ) {
-    setActionState((s) => ({ ...s, [proposalId]: "loading" }));
+    setActionState((s) => ({ ...s, [proposalId]: { status: "loading" } }));
     const fn =
       action === "approve"
         ? approveProposal
@@ -88,7 +100,13 @@ export function ProposalList({
     const result = await fn(proposalId);
     setActionState((s) => ({
       ...s,
-      [proposalId]: result.success ? "done" : result.message,
+      [proposalId]: result.success
+        ? {
+            status: "done",
+            txHash: result.txHash,
+            onChainAmount: result.onChainAmount,
+          }
+        : { status: "error", errorMessage: result.message },
     }));
     router.refresh();
   }
@@ -132,11 +150,34 @@ export function ProposalList({
             </span>
           </div>
 
-          {actionState[p.id] &&
-            actionState[p.id] !== "loading" &&
-            actionState[p.id] !== "done" && (
-              <p className="mt-2 text-xs text-red-600">{actionState[p.id]}</p>
-            )}
+          {actionState[p.id]?.status === "error" && (
+            <p className="mt-2 text-xs text-red-600">
+              {actionState[p.id].errorMessage}
+            </p>
+          )}
+
+          {(actionState[p.id]?.txHash ?? p.txHash) && (
+            <div className="mt-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              <p>
+                Executed on-chain:{" "}
+                {actionState[p.id]?.onChainAmount ?? p.onChainAmount} (
+                {DEMO_SCALE_LABEL})
+              </p>
+              <p className="mt-0.5">
+                Tx:{" "}
+                <a
+                  href={arcExplorerTxUrl(
+                    (actionState[p.id]?.txHash ?? p.txHash) as string,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  {actionState[p.id]?.txHash ?? p.txHash}
+                </a>
+              </p>
+            </div>
+          )}
 
           <div className="mt-3 flex gap-2">
             {p.status === "pending" &&
@@ -146,7 +187,7 @@ export function ProposalList({
                   <Button
                     size="sm"
                     onClick={() => handleAction(p.id, "approve")}
-                    disabled={actionState[p.id] === "loading"}
+                    disabled={actionState[p.id]?.status === "loading"}
                   >
                     Approve
                   </Button>
@@ -154,7 +195,7 @@ export function ProposalList({
                     size="sm"
                     variant="outline"
                     onClick={() => handleAction(p.id, "reject")}
-                    disabled={actionState[p.id] === "loading"}
+                    disabled={actionState[p.id]?.status === "loading"}
                   >
                     Reject
                   </Button>
@@ -166,7 +207,7 @@ export function ProposalList({
                 <Button
                   size="sm"
                   onClick={() => handleAction(p.id, "confirm")}
-                  disabled={actionState[p.id] === "loading"}
+                  disabled={actionState[p.id]?.status === "loading"}
                 >
                   Confirm payment
                 </Button>
@@ -174,7 +215,7 @@ export function ProposalList({
                   size="sm"
                   variant="outline"
                   onClick={() => handleAction(p.id, "reject")}
-                  disabled={actionState[p.id] === "loading"}
+                  disabled={actionState[p.id]?.status === "loading"}
                 >
                   Cancel
                 </Button>
