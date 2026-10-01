@@ -88,4 +88,5 @@ Real bank integrations, payroll, tax, invoice OCR, mobile app, multi-business, p
 | `docs/spec/payments.md` | Payment provider, money/scale, Arc tooling, env vars, wallets |
 | `docs/spec/brand.md` | Brand identity, per-company theming, voice & tone |
 | `docs/phases/phase-N.md` | Tasks for each phase |
+| `docs/pitch.md` | On-chain value prop for SMBs, traction tactics, pitch framing — not a build phase |
 | `BUILD_LOG.md` | Progress, transactions, decisions, integration Q&A |
