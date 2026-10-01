@@ -79,6 +79,30 @@ describe("recentTransactions", () => {
     expect(rows[0].date >= rows[1].date).toBe(true);
     expect(rows[1].date >= rows[2].date).toBe(true);
   });
+
+  it("orders same-date transactions by createdAt, not array position", () => {
+    const sameDayEarlier = {
+      id: "tx-early",
+      date: "2026-09-30",
+      createdAt: "2026-09-30T09:00:00.000Z",
+      description: "Earlier",
+      category: "Supplier",
+      amountCents: -eur(10),
+    };
+    const sameDayLater = {
+      id: "tx-later",
+      date: "2026-09-30",
+      createdAt: "2026-09-30T15:00:00.000Z",
+      description: "Later",
+      category: "Supplier",
+      amountCents: -eur(20),
+    };
+    // Deliberately inserted with the later transaction first, to prove the
+    // sort uses createdAt rather than falling back to array order.
+    const rows = recentTransactions([sameDayLater, sameDayEarlier], 2);
+    expect(rows[0].id).toBe("tx-later");
+    expect(rows[1].id).toBe("tx-early");
+  });
 });
 
 describe("buildDashboardData", () => {

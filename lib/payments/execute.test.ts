@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { SEED_TODAY } from "@/lib/data/seed";
 import { createInMemoryRepositories } from "@/lib/repositories/in-memory";
 import type { Repositories } from "@/lib/repositories/types";
 import type { PaymentProvider, PaymentStatus } from "./types";
@@ -273,6 +274,92 @@ describe("executePayment", () => {
     expect(result.txHash).toBe("0xabc");
   });
 
+  it("retries a failed proposal with a fresh idempotency key per attempt", async () => {
+    const proposal = await createApprovedProposal(repos);
+    const submittedKeys: string[] = [];
+    const provider: PaymentProvider = {
+      submit: async (req) => {
+        submittedKeys.push(req.idempotencyKey);
+        return { paymentId: `pay-${submittedKeys.length}`, status: "pending" };
+      },
+      getStatus: async () => ({
+        status: "failed",
+        failureReason: "Simulated transaction failure",
+      }),
+    };
+
+    const firstAttempt = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
+    expect(firstAttempt.status).toBe("failed");
+    expect((await repos.proposals.getById(proposal.id))!.status).toBe(
+      "failed",
+    );
+
+    // Retrying calls executePayment again on the now-"failed" proposal —
+    // previously blocked by INVALID_STATUS; retry is the one caller allowed
+    // to re-enter execution on a failed proposal.
+    const secondAttempt = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
+    expect(secondAttempt.status).toBe("failed");
+
+    expect(submittedKeys).toHaveLength(2);
+    expect(submittedKeys[0]).not.toBe(submittedKeys[1]);
+
+    const updated = await repos.proposals.getById(proposal.id);
+    expect(updated!.attempts).toBe(2);
+  });
+
+  it("re-checks the actor's real daily spend at execution time (not hardcoded to zero)", async () => {
+    // Liam's seed policy: €100 single-payment limit, €300 daily limit.
+    // Already spent €270 today via other executed payments.
+    await repos.transactions.add({
+      id: "tx-prior",
+      date: SEED_TODAY,
+      createdAt: `${SEED_TODAY}T09:00:00.000Z`,
+      description: "Prior payment",
+      category: "Supplier",
+      amountCents: -eur(270),
+      proposedByActorId: "liam",
+    });
+
+    // €50 is within Liam's single-payment limit, but €270 + €50 = €320
+    // breaches his €300 daily limit — the re-check must catch this even
+    // though the proposal itself was created as "allowed".
+    const proposal = await createApprovedProposal(repos, {
+      amountCents: eur(50),
+      proposedByActorId: "liam",
+    });
+    const provider = createMockProvider();
+
+    try {
+      await executePayment(proposal.id, repos, provider);
+      throw new Error("expected executePayment to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ExecutionError);
+      expect((e as ExecutionError).code).toBe("POLICY_REJECTED");
+    }
+
+    const updated = await repos.proposals.getById(proposal.id);
+    expect(updated!.status).toBe("rejected");
+  });
+
+  it("rejects retrying a rejected proposal", async () => {
+    const proposal = await createApprovedProposal(repos);
+    await repos.proposals.update(proposal.id, { status: "rejected" });
+    const provider = createMockProvider();
+
+    try {
+      await executePayment(proposal.id, repos, provider);
+      throw new Error("expected executePayment to throw");
+    } catch (e) {
+      expect((e as ExecutionError).code).toBe("INVALID_STATUS");
+    }
+  });
+
   it("deducts from business balance only on confirmed payment", async () => {
     const proposal = await createApprovedProposal(repos, {
       amountCents: eur(50),
@@ -290,6 +377,8 @@ describe("executePayment", () => {
     const txs = await repos.transactions.list();
     const execTx = txs.find((t) => t.id === `tx-exec-${proposal.id}`);
     expect(execTx).toBeDefined();
+    expect(execTx!.txHash).toBe("0xabc");
+    expect(execTx!.proposalId).toBe(proposal.id);
     expect(execTx!.amountCents).toBe(-eur(50));
   });
 });

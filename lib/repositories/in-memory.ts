@@ -75,6 +75,19 @@ class InMemoryTransactionRepository implements TransactionRepository {
       .filter((t) => t.date === date && t.amountCents < 0)
       .reduce((sum, t) => sum - t.amountCents, 0);
   }
+  async spentOnDateByActorCents(
+    date: string,
+    actorId: string,
+  ): Promise<number> {
+    return this.transactions
+      .filter(
+        (t) =>
+          t.date === date &&
+          t.amountCents < 0 &&
+          t.proposedByActorId === actorId,
+      )
+      .reduce((sum, t) => sum - t.amountCents, 0);
+  }
 }
 
 class InMemoryPolicyRepository implements PolicyRepository {
@@ -109,6 +122,7 @@ class InMemoryPaymentProposalRepository implements PaymentProposalRepository {
       policyDecision: input.policyDecision,
       requiredApproverRole: input.requiredApproverRole,
       requiresConfirmation: input.requiresConfirmation,
+      attempts: 0,
     };
     this.proposals.set(proposal.id, proposal);
     return clone(proposal);

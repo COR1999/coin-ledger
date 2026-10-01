@@ -22,6 +22,9 @@ const baseEnvSchema = z.object({
   CIRCLE_API_KEY: z.string().min(1).optional(),
   CIRCLE_ENTITY_SECRET: z.string().min(1).optional(),
   CIRCLE_WALLET_ADDRESS: z.string().min(1).optional(),
+  // Caps chat requests per IP per hour — protects the shared Gemini free-tier
+  // quota from a single visitor exhausting it on a public demo deployment.
+  CHAT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(10),
 });
 
 export const envSchema = baseEnvSchema.superRefine((env, ctx) => {

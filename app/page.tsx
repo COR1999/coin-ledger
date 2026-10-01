@@ -1,4 +1,5 @@
 import { CalendarClock, ShieldCheck, TrendingDown, Wallet } from "lucide-react";
+import Link from "next/link";
 
 import { AppHeader } from "@/components/app/app-header";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
@@ -137,8 +138,14 @@ export default async function DashboardPage() {
           </Card>
 
           <Card className="lg:col-span-2">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Recent transactions</CardTitle>
+              <Link
+                href="/transactions"
+                className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+              >
+                View all
+              </Link>
             </CardHeader>
             <CardContent>
               <TransactionTable transactions={data.transactions} />

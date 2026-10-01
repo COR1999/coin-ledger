@@ -54,4 +54,36 @@ describe("in-memory repositories", () => {
       eur(1_200),
     );
   });
+
+  it("sums money out for a given date, scoped to one actor", async () => {
+    const repos = createInMemoryRepositories();
+    await repos.transactions.add({
+      id: "tx-test-liam",
+      date: "2026-09-30",
+      createdAt: "2026-09-30T10:00:00.000Z",
+      description: "Liam's payment",
+      category: "Supplier",
+      amountCents: -eur(50),
+      proposedByActorId: "liam",
+    });
+    await repos.transactions.add({
+      id: "tx-test-mario",
+      date: "2026-09-30",
+      createdAt: "2026-09-30T11:00:00.000Z",
+      description: "Mario's payment",
+      category: "Supplier",
+      amountCents: -eur(30),
+      proposedByActorId: "mario",
+    });
+
+    expect(
+      await repos.transactions.spentOnDateByActorCents("2026-09-30", "liam"),
+    ).toBe(eur(50));
+    expect(
+      await repos.transactions.spentOnDateByActorCents("2026-09-30", "mario"),
+    ).toBe(eur(30));
+    expect(
+      await repos.transactions.spentOnDateByActorCents("2026-09-30", "aoife"),
+    ).toBe(0);
+  });
 });

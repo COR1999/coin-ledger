@@ -38,6 +38,7 @@ export default async function ApprovalsPage() {
         approvedBy: approver?.name ?? null,
         txHash: p.txHash ?? null,
         onChainAmount: p.txHash ? formatOnChainAmount(p.amountCents) : null,
+        failureReason: p.failureReason ?? null,
       };
     });
 

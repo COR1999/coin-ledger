@@ -153,6 +153,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-1",
     date: "2026-09-29",
+    createdAt: "2026-09-29T00:00:00.000Z",
     description: "Card takings",
     category: "Revenue",
     amountCents: eur(640),
@@ -160,6 +161,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-2",
     date: "2026-09-29",
+    createdAt: "2026-09-29T00:00:00.000Z",
     description: "ABC Coffee — beans",
     category: "Supplier",
     amountCents: -eur(1_200),
@@ -168,6 +170,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-3",
     date: "2026-09-28",
+    createdAt: "2026-09-28T00:00:00.000Z",
     description: "Card takings",
     category: "Revenue",
     amountCents: eur(580),
@@ -175,6 +178,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-4",
     date: "2026-09-27",
+    createdAt: "2026-09-27T00:00:00.000Z",
     description: "Local Veg — produce",
     category: "Supplier",
     amountCents: -eur(300),
@@ -183,6 +187,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-5",
     date: "2026-09-26",
+    createdAt: "2026-09-26T00:00:00.000Z",
     description: "Card takings",
     category: "Revenue",
     amountCents: eur(710),
@@ -190,6 +195,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-6",
     date: "2026-09-25",
+    createdAt: "2026-09-25T00:00:00.000Z",
     description: "Utilities direct debit",
     category: "Utilities",
     amountCents: -eur(410),
@@ -197,6 +203,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-7",
     date: "2026-09-24",
+    createdAt: "2026-09-24T00:00:00.000Z",
     description: "Card takings",
     category: "Revenue",
     amountCents: eur(690),
@@ -204,6 +211,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-8",
     date: "2026-09-20",
+    createdAt: "2026-09-20T00:00:00.000Z",
     description: "ABC Coffee — beans",
     category: "Supplier",
     amountCents: -eur(2_200),
@@ -212,6 +220,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-9",
     date: "2026-09-15",
+    createdAt: "2026-09-15T00:00:00.000Z",
     description: "Staff wages",
     category: "Wages",
     amountCents: -eur(3_600),
@@ -219,6 +228,7 @@ export const seedTransactions: Transaction[] = [
   {
     id: "tx-10",
     date: "2026-09-01",
+    createdAt: "2026-09-01T00:00:00.000Z",
     description: "Premises rent",
     category: "Rent",
     amountCents: -eur(2_800),

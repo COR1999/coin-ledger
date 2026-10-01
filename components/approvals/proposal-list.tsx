@@ -7,6 +7,7 @@ import {
   approveProposal,
   confirmProposal,
   rejectProposal,
+  retryPayment,
 } from "@/app/actions/approvals";
 import { arcExplorerTxUrl, DEMO_SCALE_LABEL } from "@/lib/config";
 
@@ -23,6 +24,7 @@ interface Proposal {
   approvedBy: string | null;
   txHash: string | null;
   onChainAmount: string | null;
+  failureReason: string | null;
 }
 
 interface ActionState {
@@ -87,7 +89,7 @@ export function ProposalList({
 
   async function handleAction(
     proposalId: string,
-    action: "approve" | "confirm" | "reject",
+    action: "approve" | "confirm" | "reject" | "retry",
   ) {
     setActionState((s) => ({ ...s, [proposalId]: { status: "loading" } }));
     const fn =
@@ -95,7 +97,9 @@ export function ProposalList({
         ? approveProposal
         : action === "confirm"
           ? confirmProposal
-          : rejectProposal;
+          : action === "retry"
+            ? retryPayment
+            : rejectProposal;
 
     const result = await fn(proposalId);
     setActionState((s) => ({
@@ -156,6 +160,24 @@ export function ProposalList({
             </p>
           )}
 
+          {p.status === "failed" &&
+            actionState[p.id]?.status !== "error" &&
+            p.failureReason && (
+              <p className="mt-2 text-xs text-red-600">
+                Execution failed: {p.failureReason}
+              </p>
+            )}
+
+          {(p.status === "approved" || p.status === "confirmed") &&
+            !p.txHash &&
+            actionState[p.id]?.status !== "error" && (
+              <p className="mt-2 text-xs text-amber-600">
+                This payment was approved but never executed — the request
+                that should have submitted it was interrupted. Retry to
+                submit it now.
+              </p>
+            )}
+
           {(actionState[p.id]?.txHash ?? p.txHash) && (
             <div className="mt-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
               <p>
@@ -202,25 +224,43 @@ export function ProposalList({
                 </>
               )}
 
-            {p.status === "awaiting_confirmation" && (
-              <>
+            {p.status === "awaiting_confirmation" &&
+              (currentActorRole === "owner" ||
+                currentActorRole === "accountant") && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => handleAction(p.id, "confirm")}
+                    disabled={actionState[p.id]?.status === "loading"}
+                  >
+                    Confirm payment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAction(p.id, "reject")}
+                    disabled={actionState[p.id]?.status === "loading"}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+
+            {(p.status === "failed" ||
+              ((p.status === "approved" || p.status === "confirmed") &&
+                !p.txHash)) &&
+              (currentActorRole === "owner" ||
+                currentActorRole === "accountant") && (
                 <Button
                   size="sm"
-                  onClick={() => handleAction(p.id, "confirm")}
+                  onClick={() => handleAction(p.id, "retry")}
                   disabled={actionState[p.id]?.status === "loading"}
                 >
-                  Confirm payment
+                  {actionState[p.id]?.status === "loading"
+                    ? "Retrying..."
+                    : "Retry payment"}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleAction(p.id, "reject")}
-                  disabled={actionState[p.id]?.status === "loading"}
-                >
-                  Cancel
-                </Button>
-              </>
-            )}
+              )}
           </div>
         </div>
       ))}

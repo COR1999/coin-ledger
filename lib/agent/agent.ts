@@ -11,30 +11,66 @@ import { toolDefinitions, executeTool } from "./tools";
 import { formatEuros } from "@/lib/money";
 
 const MAX_ITERATIONS = 10;
-const MODEL = "gemini-3.6-flash";
+/**
+ * Free-tier Gemini quota is scoped per model name (confirmed via direct API
+ * calls, see BUILD_LOG) and is tight (as low as 20 requests/day on some
+ * models) for a tool-calling agent that costs 2+ calls per turn. Rather than
+ * fail a whole chat turn when one model's daily quota is exhausted, try each
+ * model in order and stick with the first that works. Ordered by actual
+ * evaluation, not just availability: gemini-3.5-flash is the considered
+ * choice from Phase 3; the rest are same-family fallbacks confirmed to work
+ * during Phase 6/7 quota exhaustion, not independently evaluated for
+ * quality/latency.
+ */
+const MODEL_FALLBACK_CHAIN = [
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.7-flash",
+] as const;
 const MAX_RETRIES = 4;
 const BASE_BACKOFF_MS = 1000;
 
-function isTransient(error: unknown): boolean {
+function isQuotaExhausted(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes('"code":503') || message.includes('"code":429');
+  return message.includes('"code":429');
 }
 
-async function generateWithRetry(
-  fn: () => Promise<GenerateContentResponse>,
-): Promise<GenerateContentResponse> {
+function isTransientOverload(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('"code":503');
+}
+
+/**
+ * Tries each model in `modelChain` in order. A 429 (quota exhausted) moves
+ * to the next model immediately — backing off and retrying the same model
+ * wastes time, since a daily quota won't reset within a few seconds. A 503
+ * (transient overload) retries the same model with exponential backoff,
+ * since that's a genuine transient condition on that model specifically.
+ */
+async function generateWithFallback(
+  buildRequest: (model: string) => Promise<GenerateContentResponse>,
+  modelChain: readonly string[],
+): Promise<{ response: GenerateContentResponse; model: string }> {
   let lastError: unknown;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      if (!isTransient(error) || attempt === MAX_RETRIES - 1) {
-        throw error;
+  for (const model of modelChain) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const response = await buildRequest(model);
+        return { response, model };
+      } catch (error) {
+        lastError = error;
+        if (isQuotaExhausted(error)) {
+          console.error(`Gemini quota exhausted for ${model}, falling back`);
+          break;
+        }
+        if (!isTransientOverload(error) || attempt === MAX_RETRIES - 1) {
+          throw error;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, BASE_BACKOFF_MS * 2 ** attempt),
+        );
       }
-      await new Promise((resolve) =>
-        setTimeout(resolve, BASE_BACKOFF_MS * 2 ** attempt),
-      );
     }
   }
   throw lastError;
@@ -110,18 +146,32 @@ export async function runAgent(
 
   let proposalId: string | undefined;
   let autoExecute = false;
+  // Once a model proves it has quota, prefer it for the rest of this
+  // conversation (consistent behavior turn-to-turn) but keep the full chain
+  // as a safety net after it in case that model exhausts mid-conversation.
+  let resolvedModel: string | undefined;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const response = await generateWithRetry(() =>
-      client.models.generateContent({
-        model: MODEL,
-        contents,
-        config: {
-          systemInstruction: buildSystemPrompt(actor, policies),
-          tools: [{ functionDeclarations: toolDefinitions }],
-        },
-      }),
+    const chain = resolvedModel
+      ? [
+          resolvedModel,
+          ...MODEL_FALLBACK_CHAIN.filter((m) => m !== resolvedModel),
+        ]
+      : MODEL_FALLBACK_CHAIN;
+
+    const { response, model } = await generateWithFallback(
+      (model) =>
+        client.models.generateContent({
+          model,
+          contents,
+          config: {
+            systemInstruction: buildSystemPrompt(actor, policies),
+            tools: [{ functionDeclarations: toolDefinitions }],
+          },
+        }),
+      chain,
     );
+    resolvedModel = model;
 
     const functionCalls = response.functionCalls;
 

@@ -54,4 +54,23 @@ describe("parseEnv", () => {
       parseEnv({ PAYMENT_PROVIDER: "arc", GOOGLE_API_KEY: "test-key" }),
     ).toThrow(/CIRCLE_API_KEY/);
   });
+
+  it("defaults CHAT_RATE_LIMIT_PER_HOUR to 10 when unset", () => {
+    const env = parseEnv({ GOOGLE_API_KEY: "test-key" });
+    expect(env.CHAT_RATE_LIMIT_PER_HOUR).toBe(10);
+  });
+
+  it("accepts a custom CHAT_RATE_LIMIT_PER_HOUR", () => {
+    const env = parseEnv({
+      GOOGLE_API_KEY: "test-key",
+      CHAT_RATE_LIMIT_PER_HOUR: "25",
+    });
+    expect(env.CHAT_RATE_LIMIT_PER_HOUR).toBe(25);
+  });
+
+  it("rejects a non-positive CHAT_RATE_LIMIT_PER_HOUR", () => {
+    expect(() =>
+      parseEnv({ GOOGLE_API_KEY: "test-key", CHAT_RATE_LIMIT_PER_HOUR: "0" }),
+    ).toThrow(/CHAT_RATE_LIMIT_PER_HOUR/);
+  });
 });

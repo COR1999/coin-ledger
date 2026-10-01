@@ -111,13 +111,18 @@ export function forecastSeries(
   return points;
 }
 
-/** Recent transactions, newest first, limited to `limit` rows. */
+/**
+ * Recent transactions, newest first, limited to `limit` rows. Sorts by
+ * `createdAt`, not `date` — several transactions can share the same display
+ * date (every payment executed "today" lands on one fixed demo-anchor date),
+ * and `date` alone can't order those relative to each other.
+ */
 export function recentTransactions(
   transactions: readonly Transaction[],
   limit = 12,
 ): Transaction[] {
   return [...transactions]
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
     .slice(0, limit);
 }
 

@@ -73,7 +73,7 @@ export async function executePayment(
     );
   }
 
-  if (proposal.status === "failed" || proposal.status === "rejected") {
+  if (proposal.status === "rejected") {
     throw new ExecutionError(
       `Proposal ${proposalId} has status ${proposal.status} and cannot be executed`,
       "INVALID_STATUS",
@@ -97,12 +97,16 @@ export async function executePayment(
     );
   }
 
-  const [business, supplier, policies, todaySpentByBusiness] =
+  const [business, supplier, policies, todaySpentByBusiness, todaySpentByActor] =
     await Promise.all([
       repos.business.get(),
       repos.suppliers.getById(proposal.supplierId),
       repos.policies.get(),
       repos.transactions.spentOnDateCents(SEED_TODAY),
+      repos.transactions.spentOnDateByActorCents(
+        SEED_TODAY,
+        proposal.proposedByActorId,
+      ),
     ]);
 
   if (!supplier) {
@@ -133,7 +137,7 @@ export async function executePayment(
     businessState: {
       balanceCents: business.currentBalanceCents,
       obligationsNext30DaysCents: obligationsNext30Days,
-      todaySpentByActorCents: 0,
+      todaySpentByActorCents: todaySpentByActor,
       todaySpentByBusinessCents: todaySpentByBusiness,
     },
     policies,
@@ -183,10 +187,14 @@ export async function executePayment(
     );
   }
 
-  await repos.proposals.update(proposalId, { status: "executing" });
+  const attemptNumber = proposal.attempts + 1;
+  await repos.proposals.update(proposalId, {
+    status: "executing",
+    attempts: attemptNumber,
+  });
 
   const idempotencyKey = deterministicIdempotencyKey(
-    `proposal-${proposalId}-${proposal.createdAt}`,
+    `proposal-${proposalId}-${proposal.createdAt}-attempt-${attemptNumber}`,
   );
 
   try {
@@ -219,10 +227,17 @@ export async function executePayment(
       await repos.transactions.add({
         id: `tx-exec-${proposalId}`,
         date: SEED_TODAY,
+        // Several executions can share the same display `date` (the fixed
+        // demo-anchor date) — createdAt is the real moment of execution, so
+        // recentTransactions can still sort them in true chronological order.
+        createdAt: new Date().toISOString(),
         description: `${supplier.name} — ${proposal.reason}`,
         category: "Supplier",
         amountCents: -proposal.amountCents,
         supplierId: supplier.id,
+        txHash: status.txHash,
+        proposalId: proposal.id,
+        proposedByActorId: proposal.proposedByActorId,
       });
     } else if (status.status === "failed") {
       await repos.proposals.update(proposalId, {

@@ -131,6 +131,25 @@ export async function confirmProposal(
       };
     }
 
+    // Confirmation is the deliberate human check before money moves — the
+    // same authority bound as approving: only a role whose approval limit
+    // covers this amount may confirm it. Without this, the action was
+    // directly callable by any actor (e.g. an employee confirming a payment
+    // an accountant proposed), unlike every other mutating action here.
+    const policies = await repos.policies.get();
+    const approvalCheck = evaluateApproval({
+      approverRole: actor.role,
+      amountCents: proposal.amountCents,
+      policies,
+    });
+
+    if (!approvalCheck.permitted) {
+      return {
+        success: false,
+        message: approvalCheck.reasons.join("; "),
+      };
+    }
+
     await repos.proposals.update(proposalId, {
       status: "confirmed",
       confirmedByActorId: actor.id,
@@ -156,6 +175,89 @@ export async function confirmProposal(
       return {
         success: true,
         message: "Payment confirmed and submitted (pending on-chain).",
+        proposalId,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Execution error: ${error instanceof Error ? error.message : "Unknown"}`,
+        proposalId,
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function retryPayment(
+  proposalId: string,
+): Promise<ActionResult> {
+  try {
+    proposalIdSchema.parse(proposalId);
+    const actor = await getCurrentActor();
+    const repos = getRepositories();
+
+    const proposal = await repos.proposals.getById(proposalId);
+    if (!proposal) {
+      return { success: false, message: "Proposal not found" };
+    }
+
+    // "approved"/"confirmed" are normally transient — the request that sets
+    // them immediately calls executePayment in the same server action. If
+    // that call never ran (e.g. the proposal was created by the chat agent
+    // but a later turn in the same request crashed before reaching
+    // auto-execute), the proposal is stuck there with no failureReason and
+    // no other recovery path, so retry covers it the same as "failed".
+    const retryableStatuses = ["failed", "approved", "confirmed"];
+    if (!retryableStatuses.includes(proposal.status)) {
+      return {
+        success: false,
+        message: `Cannot retry a proposal with status "${proposal.status}"`,
+      };
+    }
+
+    // Retrying resubmits the same payment to the provider — the same
+    // authority check approveProposal enforces applies here: only a role
+    // whose approval limit covers this amount may trigger it. Without this,
+    // the Retry server action was directly callable by any actor regardless
+    // of the UI's owner/accountant-only button gating.
+    const policies = await repos.policies.get();
+    const approvalCheck = evaluateApproval({
+      approverRole: actor.role,
+      amountCents: proposal.amountCents,
+      policies,
+    });
+
+    if (!approvalCheck.permitted) {
+      return {
+        success: false,
+        message: approvalCheck.reasons.join("; "),
+      };
+    }
+
+    try {
+      const result = await executePayment(proposalId, repos, provider);
+      if (result.status === "confirmed") {
+        return {
+          success: true,
+          message: `Retry succeeded — executed on-chain: ${result.onChainAmount} (${DEMO_SCALE_LABEL}). Tx: ${result.txHash}`,
+          proposalId,
+          txHash: result.txHash,
+          onChainAmount: result.onChainAmount,
+        };
+      } else if (result.status === "failed") {
+        return {
+          success: false,
+          message: `Retry failed again: ${result.failureReason}`,
+          proposalId,
+        };
+      }
+      return {
+        success: true,
+        message: "Retry submitted (pending on-chain confirmation).",
         proposalId,
       };
     } catch (error) {

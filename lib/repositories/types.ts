@@ -27,6 +27,8 @@ export interface TransactionRepository {
   add(transaction: Transaction): Promise<Transaction>;
   /** Total money out (as a positive amount) recorded on a given ISO date. */
   spentOnDateCents(date: string): Promise<number>;
+  /** Total money out by a specific actor on a given ISO date. */
+  spentOnDateByActorCents(date: string, actorId: string): Promise<number>;
 }
 
 export interface PolicyRepository {
@@ -58,6 +60,7 @@ export type ProposalUpdate = Partial<
     | "paymentId"
     | "txHash"
     | "failureReason"
+    | "attempts"
   >
 >;
 

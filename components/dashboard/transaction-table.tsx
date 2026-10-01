@@ -1,3 +1,4 @@
+import { arcExplorerTxUrl, formatOnChainAmount } from "@/lib/config";
 import type { Transaction } from "@/lib/domain/types";
 import { formatEurosDisplay } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,9 @@ export function TransactionTable({
             <th scope="col" className="py-2 pl-4 text-right font-medium">
               Amount
             </th>
+            <th scope="col" className="py-2 pl-4 text-left font-medium">
+              On-chain
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -55,6 +59,21 @@ export function TransactionTable({
                 >
                   {isIncome ? "+" : ""}
                   {formatEurosDisplay(t.amountCents)}
+                </td>
+                <td className="py-2.5 pl-4 text-left text-xs">
+                  {t.txHash ? (
+                    <a
+                      href={arcExplorerTxUrl(t.txHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline underline-offset-2"
+                      title={`${formatOnChainAmount(Math.abs(t.amountCents))} — view on Arc explorer`}
+                    >
+                      {formatOnChainAmount(Math.abs(t.amountCents))}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
               </tr>
             );

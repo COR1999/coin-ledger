@@ -42,13 +42,26 @@ export interface Obligation {
 
 export interface Transaction {
   id: string;
-  /** ISO date (YYYY-MM-DD). */
+  /** ISO date (YYYY-MM-DD), for display — not precise enough to sort by. */
   date: string;
+  /**
+   * Full ISO datetime. Several transactions can share the same `date` (every
+   * payment executed "today" lands on the same fixed demo-anchor date), so
+   * this is the actual sort key for recency — `date` alone can't tell two
+   * same-day transactions apart.
+   */
+  createdAt: string;
   description: string;
   category: string;
   /** Positive for money in (revenue), negative for money out (expense). */
   amountCents: number;
   supplierId?: string;
+  /** Confirmed on-chain tx hash, for payments settled via Arc. */
+  txHash?: string;
+  /** The payment proposal that produced this transaction, if any. */
+  proposalId?: string;
+  /** The actor who proposed the payment, if any — drives per-actor daily limits. */
+  proposedByActorId?: string;
 }
 
 export interface Business {
@@ -123,4 +136,12 @@ export interface PaymentProposal {
   paymentId?: string;
   txHash?: string;
   failureReason?: string;
+  /**
+   * Execution attempts made so far (0 before the first submission). Folded
+   * into the idempotency key seed so a retry of a failed payment gets a
+   * genuinely new key — reusing the original key would make Circle replay
+   * the same failed result forever, since idempotency keys are meant to
+   * dedupe repeats of one logical attempt, not distinguish retries.
+   */
+  attempts: number;
 }

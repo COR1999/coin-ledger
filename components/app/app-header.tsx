@@ -13,7 +13,7 @@ export function AppHeader({
   businessName: string;
   actors: Actor[];
   currentActor: Actor;
-  active: "dashboard" | "chat" | "approvals" | "settings";
+  active: "dashboard" | "chat" | "approvals" | "transactions" | "settings";
 }) {
   return (
     <header className="border-b bg-background">
@@ -54,6 +54,12 @@ export function AppHeader({
             </NavLink>
             <NavLink href="/approvals" current={active === "approvals"}>
               Approvals
+            </NavLink>
+            <NavLink
+              href="/transactions"
+              current={active === "transactions"}
+            >
+              Transactions
             </NavLink>
             <NavLink href="/settings" current={active === "settings"}>
               Policies

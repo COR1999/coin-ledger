@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runAgent, type AgentMessage } from "@/lib/agent/agent";
 import { arcExplorerTxUrl, DEMO_SCALE_LABEL } from "@/lib/config";
+import { env } from "@/lib/env";
 import { executePayment } from "@/lib/payments/execute";
 import { getPaymentProvider } from "@/lib/payments/provider";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
 
@@ -18,7 +20,29 @@ const requestSchema = z.object({
 
 const provider = getPaymentProvider();
 
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+
+/** First hop in X-Forwarded-For, or "unknown" when absent (e.g. local dev). */
+function clientIp(req: NextRequest): string {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  return forwardedFor?.split(",")[0]?.trim() || "unknown";
+}
+
 export async function POST(req: NextRequest) {
+  const rateLimitResult = checkRateLimit(
+    clientIp(req),
+    env.CHAT_RATE_LIMIT_PER_HOUR,
+    RATE_LIMIT_WINDOW_MS,
+  );
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      {
+        error: `This demo limits chat messages per visitor to keep it available for everyone. Please try again in about ${Math.ceil((rateLimitResult.retryAfterSeconds ?? 60) / 60)} minute(s).`,
+      },
+      { status: 429 },
+    );
+  }
+
   try {
     const body = await req.json();
     const { messages } = requestSchema.parse(body);
@@ -59,6 +83,19 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error("Chat API error:", error);
+    const message = error instanceof Error ? error.message : "";
+    // runAgent only throws a 429 after exhausting every model in its
+    // fallback chain (lib/agent/agent.ts) — distinct from this route's own
+    // rate limiter, which never reaches here.
+    if (message.includes('"code":429')) {
+      return NextResponse.json(
+        {
+          error:
+            "This demo has hit its free daily AI quota. Please check back tomorrow.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
