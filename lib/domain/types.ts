@@ -71,6 +71,28 @@ export interface Business {
   currentBalanceCents: number;
 }
 
+/**
+ * A landing-page waitlist signup (Phase 9). Site-wide, not per-workspace —
+ * a visitor expresses interest independent of which business they viewed.
+ */
+export interface WaitlistSignup {
+  id: string;
+  name: string;
+  email: string;
+  businessType: string;
+  note?: string;
+  createdAt: string;
+}
+
+export const waitlistSignupInputSchema = z.object({
+  name: z.string().trim().min(1, "Required").max(80),
+  email: z.string().trim().email("Enter a valid email").max(120),
+  businessType: z.string().trim().min(1, "Required").max(60),
+  note: z.string().trim().max(500).optional(),
+});
+
+export type WaitlistSignupInput = z.infer<typeof waitlistSignupInputSchema>;
+
 /** Per-role limits. `null` means "not applicable" for that role. */
 export interface RoleLimits {
   /** Largest single payment this role may initiate. */

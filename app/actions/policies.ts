@@ -71,7 +71,7 @@ export async function updatePoliciesAction(
   const next = applyPolicyForm(policies, parsed.data);
   await repos.policies.set(next);
   revalidatePath("/settings");
-  revalidatePath("/");
+  revalidatePath("/app");
 
   return { status: "success", message: "Policies updated." };
 }

@@ -60,11 +60,11 @@ export async function createWorkspaceAction(
 
   const workspaceId = createWorkspace(parsed.data);
   await setCurrentWorkspaceId(workspaceId);
-  redirect("/");
+  redirect("/app");
 }
 
 /** Switches back to the canned demo business. */
 export async function returnToDemoAction(): Promise<void> {
   await setCurrentWorkspaceId(DEMO_WORKSPACE_ID);
-  redirect("/");
+  redirect("/app");
 }

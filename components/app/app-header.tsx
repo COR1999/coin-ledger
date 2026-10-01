@@ -54,7 +54,7 @@ export function AppHeader({
             aria-label="Primary"
             className="flex flex-wrap items-center gap-1"
           >
-            <NavLink href="/" current={active === "dashboard"}>
+            <NavLink href="/app" current={active === "dashboard"}>
               Dashboard
             </NavLink>
             <NavLink href="/chat" current={active === "chat"}>

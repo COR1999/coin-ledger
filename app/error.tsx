@@ -27,7 +27,7 @@ export default function GlobalError({
       </p>
       <div className="mt-2 flex gap-2">
         <Button onClick={reset}>Try again</Button>
-        <Button variant="outline" onClick={() => router.push("/")}>
+        <Button variant="outline" onClick={() => router.push("/app")}>
           Back to dashboard
         </Button>
       </div>
