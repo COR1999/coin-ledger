@@ -1,5 +1,10 @@
 # Build log
 
+## arc-canteen submissions
+- **`update product`** — 2026-10-03, confirmed via `arc-canteen ls`. Summarized everything since the last update (Phases 8–10, the open-source policy-gate package, the live deployment + security fix, the mobile UX pass). Run with your explicit confirmation.
+- `update traction` — **not yet run**. Current waitlist entries are my own test data from verification passes, not real signups; running it now would report fake traction. Run once the demo link has actually gone to real people.
+- `submit-showcase` — not run. Your call; separate from the real Tameion submission (the Google Form).
+
 ## Tameion hackathon — the actual rubric (received 2026-10-03)
 **This is the real competition we're building for — "Arc Showcase" research from 2026-10-01 was a *different*, secondary submission channel (`arc-canteen submit-showcase`), not the main event.**
 
