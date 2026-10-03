@@ -71,7 +71,7 @@ export default async function DashboardPage() {
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold">Cash overview</h1>
+          <h1 className="font-serif text-xl font-semibold">Cash overview</h1>
           <p className="text-sm text-muted-foreground">
             What {business.name} can safely do with its money today, as of{" "}
             {SEED_TODAY}.

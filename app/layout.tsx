@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import { brandThemeCssVars, getBrandTheme } from "@/lib/branding/theme";
 import {
   DEMO_WORKSPACE_ID,
@@ -19,8 +19,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Headlines only — see app/globals.css's --font-serif and docs/spec/brand.md.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["500", "600"],
+});
+
 export const metadata: Metadata = {
-  title: "Small Business Financial Operator",
+  title: "Coin Ledger",
   description:
     "AI proposes, rules authorize, humans approve, infrastructure executes.",
 };
@@ -47,7 +54,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
       style={brandThemeCssVars(theme) as CSSProperties}
     >
       <body className="min-h-full flex flex-col">{children}</body>

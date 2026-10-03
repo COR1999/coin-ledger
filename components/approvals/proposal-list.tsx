@@ -57,21 +57,23 @@ function statusLabel(status: string): string {
   }
 }
 
+/** Outlined "seal" style — a border in the status colour, no fill — rather
+ * than a filled pill. See docs/spec/brand.md's Ledger direction. */
 function statusColor(status: string): string {
   switch (status) {
     case "pending":
     case "awaiting_confirmation":
-      return "text-amber-600 bg-amber-50";
+      return "text-amber-700 border-amber-600 dark:text-amber-400";
     case "approved":
     case "confirmed":
-      return "text-blue-600 bg-blue-50";
+      return "text-blue-700 border-blue-600 dark:text-blue-400";
     case "executed":
-      return "text-green-600 bg-green-50";
+      return "text-emerald-700 border-emerald-600 dark:text-emerald-400";
     case "failed":
     case "rejected":
-      return "text-red-600 bg-red-50";
+      return "text-red-700 border-red-600 dark:text-red-400";
     default:
-      return "text-muted-foreground bg-muted";
+      return "text-muted-foreground border-muted-foreground/40";
   }
 }
 
@@ -126,12 +128,17 @@ export function ProposalList({
   return (
     <div className="space-y-3">
       {proposals.map((p) => (
-        <div key={p.id} className="rounded-lg border bg-background p-4">
+        <div
+          key={p.id}
+          className="rounded-sm border border-t-2 border-t-accent bg-background p-4"
+        >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{p.supplierName}</span>
-                <span className="text-lg font-semibold">{p.amount}</span>
+                <span className="font-mono text-lg font-semibold">
+                  {p.amount}
+                </span>
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">
                 {p.reason} — proposed by {p.proposedBy}
@@ -148,7 +155,7 @@ export function ProposalList({
               )}
             </div>
             <span
-              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(p.status)}`}
+              className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${statusColor(p.status)}`}
             >
               {statusLabel(p.status)}
             </span>
@@ -179,13 +186,13 @@ export function ProposalList({
             )}
 
           {(actionState[p.id]?.txHash ?? p.txHash) && (
-            <div className="mt-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-              <p>
+            <div className="mt-2 rounded-sm border border-emerald-600/30 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              <p className="font-mono">
                 Executed on-chain:{" "}
                 {actionState[p.id]?.onChainAmount ?? p.onChainAmount} (
                 {DEMO_SCALE_LABEL})
               </p>
-              <p className="mt-0.5">
+              <p className="mt-0.5 font-mono">
                 Tx:{" "}
                 <a
                   href={arcExplorerTxUrl(

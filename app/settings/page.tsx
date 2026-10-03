@@ -34,7 +34,7 @@ export default async function SettingsPage() {
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold">Payment policies</h1>
+          <h1 className="font-serif text-xl font-semibold">Payment policies</h1>
           <p className="text-sm text-muted-foreground">
             Limits and reserves the policy engine enforces on every payment.
             {canEdit ? " Editable by the owner." : " Read-only for your role."}

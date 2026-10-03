@@ -3,7 +3,7 @@
 A pure, dependency-free TypeScript policy gate for letting an AI agent
 **propose** payments without ever letting it **authorize** one.
 
-Built while building [Small Business Financial Operator](../..) — a
+Built while building [Coin Ledger](../..) — a
 Canteen × Circle × Arc hackathon project where an LLM agent reads a
 business's live cash position and proposes payments to suppliers. The
 interesting engineering problem wasn't "call an LLM" or "call a payment

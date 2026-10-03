@@ -13,11 +13,12 @@ import { getCurrentWorkspaceId } from "@/lib/workspace";
 export default async function ApprovalsPage() {
   const workspaceId = await getCurrentWorkspaceId();
   const repos = getRepositories(workspaceId);
-  const [business, actors, actor, proposals] = await Promise.all([
+  const [business, actors, actor, proposals, suppliers] = await Promise.all([
     repos.business.get(),
     listActors(),
     getCurrentActor(),
     repos.proposals.list(),
+    repos.suppliers.list(),
   ]);
 
   const enriched = proposals
@@ -30,9 +31,13 @@ export default async function ApprovalsPage() {
       const approver = p.approvedByActorId
         ? actors.find((a) => a.id === p.approvedByActorId)
         : null;
+      const supplier = suppliers.find((s) => s.id === p.supplierId);
       return {
         id: p.id,
-        supplierName: p.supplierId,
+        // Falls back to the raw id only if the supplier record is somehow
+        // gone (shouldn't happen — supplierId always comes from a real
+        // supplier at proposal time) — never a blank label.
+        supplierName: supplier?.name ?? p.supplierId,
         amount: formatEurosDisplay(p.amountCents),
         reason: p.reason,
         proposedBy: proposer?.name ?? p.proposedByActorId,
@@ -59,7 +64,9 @@ export default async function ApprovalsPage() {
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold">Payment proposals</h1>
+          <h1 className="font-serif text-xl font-semibold">
+            Payment proposals
+          </h1>
           <p className="text-sm text-muted-foreground">
             Review, approve and confirm payments. You are signed in as{" "}
             {actor.name} ({actor.role}).

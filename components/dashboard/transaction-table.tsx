@@ -24,17 +24,19 @@ export function TransactionTable({
         {transactions.map((t) => {
           const isIncome = t.amountCents >= 0;
           return (
-            <li key={t.id} className="rounded-lg border p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">{t.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.date} · {t.category}
-                  </p>
-                </div>
+            <li
+              key={t.id}
+              className="rounded-sm border border-t-2 border-t-accent p-3"
+            >
+              <div className="flex items-baseline gap-2">
+                <p className="shrink-0 font-medium">{t.description}</p>
+                <span
+                  aria-hidden
+                  className="mb-0.5 h-0 flex-1 border-b border-dotted border-muted-foreground/40"
+                />
                 <p
                   className={cn(
-                    "shrink-0 text-right font-medium tabular-nums",
+                    "shrink-0 text-right font-mono font-medium tabular-nums",
                     isIncome
                       ? "text-emerald-600 dark:text-emerald-400"
                       : "text-foreground",
@@ -44,13 +46,16 @@ export function TransactionTable({
                   {formatEurosDisplay(t.amountCents)}
                 </p>
               </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t.date} · {t.category}
+              </p>
               <p className="mt-1.5 text-xs">
                 {t.txHash ? (
                   <a
                     href={arcExplorerTxUrl(t.txHash)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2"
+                    className="font-mono text-primary underline underline-offset-2"
                   >
                     On-chain: {formatOnChainAmount(Math.abs(t.amountCents))}
                   </a>
@@ -86,12 +91,12 @@ export function TransactionTable({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="[&>tr]:border-b [&>tr]:border-dotted [&>tr]:border-border">
             {transactions.map((t) => {
               const isIncome = t.amountCents >= 0;
               return (
                 <tr key={t.id}>
-                  <td className="py-2.5 pr-4 tabular-nums text-muted-foreground">
+                  <td className="py-2.5 pr-4 font-mono tabular-nums text-muted-foreground">
                     {t.date}
                   </td>
                   <td className="py-2.5 pr-4">{t.description}</td>
@@ -100,7 +105,7 @@ export function TransactionTable({
                   </td>
                   <td
                     className={cn(
-                      "py-2.5 pl-4 text-right font-medium tabular-nums",
+                      "py-2.5 pl-4 text-right font-mono font-medium tabular-nums",
                       isIncome
                         ? "text-emerald-600 dark:text-emerald-400"
                         : "text-foreground",
@@ -109,7 +114,7 @@ export function TransactionTable({
                     {isIncome ? "+" : ""}
                     {formatEurosDisplay(t.amountCents)}
                   </td>
-                  <td className="py-2.5 pl-4 text-left text-xs">
+                  <td className="py-2.5 pl-4 text-left font-mono text-xs">
                     {t.txHash ? (
                       <a
                         href={arcExplorerTxUrl(t.txHash)}

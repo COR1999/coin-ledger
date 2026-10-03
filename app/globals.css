@@ -4,7 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
+  /* Tighter, more rectilinear radius than shadcn's default — part of the
+     "Ledger" identity (see docs/spec/brand.md): cards read as considered
+     ledger pages, not generic soft-rounded SaaS panels. */
+  --radius: 0.3rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -25,6 +28,10 @@
   --ring: oklch(0.708 0 0);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Headlines only — body copy and data stay Geist. See docs/spec/brand.md
+     "Ledger" direction: a display serif gives the product a voice distinct
+     from generic blue-gradient fintech, without touching data legibility. */
+  --font-serif: var(--font-fraunces);
 }
 
 .dark {
@@ -73,6 +80,7 @@
   --color-ring: var(--ring);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
 }
 
 @layer base {

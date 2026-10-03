@@ -1,5 +1,5 @@
-# Small Business Financial Operator
-Canteen × Circle × Arc hackathon
+# Coin Ledger
+Small Business Financial Operator — Canteen × Circle × Arc hackathon
 
 **CURRENT PHASE: 7**
 *(I update this line. Work only on this phase.)*

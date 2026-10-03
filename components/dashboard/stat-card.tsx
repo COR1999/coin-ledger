@@ -38,10 +38,12 @@ export function StatCard({
   icon?: LucideIcon;
 }) {
   return (
-    <Card>
+    <Card className="border-t-2 border-t-accent">
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="text-xs uppercase tracking-wide">
+            {title}
+          </CardTitle>
           {Icon ? (
             <span
               className={cn(
@@ -57,7 +59,7 @@ export function StatCard({
       <CardContent>
         <p
           className={cn(
-            "text-3xl font-semibold tabular-nums",
+            "font-mono text-3xl font-semibold tabular-nums",
             VALUE_TONE[tone],
           )}
         >
@@ -96,11 +98,12 @@ export function SafeToSpendCard({
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <CardTitle
-            className={
+            className={cn(
+              "text-xs uppercase tracking-wide",
               negative
                 ? "text-destructive"
-                : "text-emerald-700 dark:text-emerald-400"
-            }
+                : "text-emerald-700 dark:text-emerald-400",
+            )}
           >
             Safe to spend today
           </CardTitle>
@@ -121,7 +124,7 @@ export function SafeToSpendCard({
       <CardContent>
         <p
           className={cn(
-            "text-3xl font-semibold tabular-nums",
+            "font-mono text-3xl font-semibold tabular-nums",
             negative
               ? "text-destructive"
               : "text-emerald-600 dark:text-emerald-400",
@@ -139,9 +142,9 @@ export function SafeToSpendCard({
             label="Less minimum reserve"
             cents={-b.minimumReserveCents}
           />
-          <div className="mt-1 flex items-center justify-between border-t pt-1 font-medium">
+          <div className="mt-1 flex items-baseline justify-between border-t pt-1.5 font-medium">
             <dt>Safe to spend</dt>
-            <dd className="tabular-nums">
+            <dd className="font-mono tabular-nums">
               {formatEurosDisplay(b.safeToSpendCents)}
             </dd>
           </div>
@@ -151,11 +154,19 @@ export function SafeToSpendCard({
   );
 }
 
+/** Ledger-style row: a dotted leader fills the gap between label and amount,
+ * like a line in a paper ledger — see docs/spec/brand.md. */
 function FormulaRow({ label, cents }: { label: string; cents: number }) {
   return (
-    <div className="flex items-center justify-between text-muted-foreground">
-      <dt>{label}</dt>
-      <dd className="tabular-nums">{formatEurosDisplay(cents)}</dd>
+    <div className="flex items-baseline gap-2 text-muted-foreground">
+      <dt className="shrink-0">{label}</dt>
+      <span
+        aria-hidden
+        className="mb-0.5 h-0 flex-1 border-b border-dotted border-muted-foreground/40"
+      />
+      <dd className="shrink-0 font-mono tabular-nums">
+        {formatEurosDisplay(cents)}
+      </dd>
     </div>
   );
 }

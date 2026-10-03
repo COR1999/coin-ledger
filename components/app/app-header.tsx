@@ -43,9 +43,9 @@ export function AppHeader({
             </span>
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Financial Operator
+                Coin Ledger
               </p>
-              <p className="text-lg font-semibold leading-tight">
+              <p className="font-serif text-lg font-semibold leading-tight">
                 {businessName}
               </p>
             </div>

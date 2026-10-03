@@ -41,14 +41,14 @@ export default async function LandingPage() {
               <path d="M4 12l5 5L20 6" />
             </svg>
           </span>
-          <p className="text-sm font-semibold">Financial Operator</p>
+          <p className="font-serif text-sm font-semibold">Coin Ledger</p>
         </div>
       </header>
 
       <main className="flex-1">
         {/* Hero */}
         <section className="mx-auto max-w-4xl px-4 py-16 text-center sm:px-6 sm:py-24">
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+          <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-5xl">
             An AI bookkeeper that proposes payments.
             <br className="hidden sm:block" /> Rules and people decide.
           </h1>
@@ -98,7 +98,7 @@ export default async function LandingPage() {
         {/* Value props */}
         <section className="border-t bg-muted/30 py-16">
           <div className="mx-auto grid max-w-5xl gap-6 px-4 sm:grid-cols-3 sm:px-6">
-            <Card>
+            <Card className="border-t-2 border-t-accent">
               <CardHeader>
                 <Zap className="mb-2 size-5 text-accent" aria-hidden />
                 <CardTitle className="text-base text-foreground">
@@ -111,7 +111,7 @@ export default async function LandingPage() {
                 bank&apos;s clock.
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-t-2 border-t-accent">
               <CardHeader>
                 <ShieldCheck className="mb-2 size-5 text-accent" aria-hidden />
                 <CardTitle className="text-base text-foreground">
@@ -124,7 +124,7 @@ export default async function LandingPage() {
                 approval decide every time.
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-t-2 border-t-accent">
               <CardHeader>
                 <Sparkles className="mb-2 size-5 text-accent" aria-hidden />
                 <CardTitle className="text-base text-foreground">
@@ -143,7 +143,9 @@ export default async function LandingPage() {
         {/* Waitlist */}
         <section id="waitlist" className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
           <div className="mb-6 text-center">
-            <h2 className="text-xl font-semibold">Not ready to try it yet?</h2>
+            <h2 className="font-serif text-xl font-semibold">
+              Not ready to try it yet?
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Leave your details and we&apos;ll reach out when it&apos;s ready
               for real use.

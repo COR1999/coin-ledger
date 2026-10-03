@@ -34,7 +34,9 @@ export default async function TransactionsPage() {
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold">Transaction history</h1>
+          <h1 className="font-serif text-xl font-semibold">
+            Transaction history
+          </h1>
           <p className="text-sm text-muted-foreground">
             Every recorded transaction for {business.name}. Payments settled on
             Arc testnet show their on-chain amount, linked to the explorer —{" "}

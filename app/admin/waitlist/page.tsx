@@ -53,7 +53,7 @@ export default async function WaitlistAdminPage({
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold">Waitlist signups</h1>
+          <h1 className="font-serif text-xl font-semibold">Waitlist signups</h1>
           <p className="text-sm text-muted-foreground">
             {signups.length} {signups.length === 1 ? "signup" : "signups"} —
             in-memory, does not survive a server restart.

@@ -1,4 +1,4 @@
-# Small Business Financial Operator
+# Coin Ledger
 
 An on-chain financial operator for a small business, built for the
 Canteen × Circle × Arc hackathon. An AI finance agent **proposes** payments; a
