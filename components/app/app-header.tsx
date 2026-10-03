@@ -71,7 +71,7 @@ export function AppHeader({
             </NavLink>
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {isDemo ? (
             <Link
               href="/onboarding"
