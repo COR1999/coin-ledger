@@ -4,9 +4,12 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    // Mirror the "@/*" -> project-root alias from tsconfig.json.
+    // Mirror tsconfig.json's path aliases.
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
+      "agent-policy-gate": fileURLToPath(
+        new URL("./packages/agent-policy-gate/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

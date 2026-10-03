@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "agent-policy-gate": ["./packages/agent-policy-gate/src/index.ts"]
     }
   },
   "include": [

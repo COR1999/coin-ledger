@@ -3,6 +3,28 @@
 Reference doc, not a build phase — for conversations, the hackathon pitch,
 and discovery calls. Two audiences, two different vocabularies:
 
+## The actual rubric (Tameion, received 2026-10-03 — see BUILD_LOG.md)
+
+30% agentic sophistication · 30% traction · 20% Circle tool usage · 20%
+innovation. Everything below should be read against those four, not
+generic "hackathon pitch" instinct:
+
+- **Traction (30%)** = this doc's own section below, plus the waitlist/
+  onboarding work (Phases 8–9) — real signups and real discovery-call
+  conversations, not vague interest.
+- **Circle tool usage (20%)** = currently Circle developer-controlled
+  wallets for execution. x402 would be a second, genuinely Circle-native
+  angle, but it's parked at the Aomi/Canteen/Tameion integration boundary
+  (BUILD_LOG Integration Q&A #10) until confirmed — not guessed into
+  half-working code for the sake of a score.
+- **Agentic sophistication (30%)** = the propose → policy-decide →
+  human-approve → re-verify-and-execute chain itself, and that the agent
+  has no path around any step of it.
+- **Innovation (20%)** = the human-in-the-loop policy gate is genuinely
+  different from what else exists in the ecosystem — see
+  `packages/agent-policy-gate/README.md` for the direct comparison against
+  `dolepee/arc-mirror-kit`, the closest prior art found.
+
 - **In-app UI** stays plain-English, never blockchain language — see
   `docs/spec/brand.md`'s voice & tone rules ("Confirm payment", never
   "Execute transaction" or "Sign"). That rule stands; it doesn't change here.

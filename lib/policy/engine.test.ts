@@ -122,7 +122,7 @@ describe("evaluatePolicy — decision scenarios", () => {
       policies,
     });
     expect(result.decision).toBe("rejected");
-    expect(result.reasons.join(" ")).toMatch(/approved supplier list/i);
+    expect(result.reasons.join(" ")).toMatch(/approved payee list/i);
   });
 
   it("8. Liam pays Local Veg €150 → needs_approval, approver accountant", () => {

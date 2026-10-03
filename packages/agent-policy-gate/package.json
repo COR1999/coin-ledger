@@ -1,0 +1,20 @@
+{
+  "name": "agent-policy-gate",
+  "version": "0.1.0",
+  "description": "A pure, dependency-free TypeScript policy gate for letting an AI agent propose payments without ever letting it authorize one.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "arc",
+    "circle",
+    "ai-agent",
+    "payments",
+    "policy-engine"
+  ]
+}
