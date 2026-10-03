@@ -59,6 +59,65 @@ policy state.
 - zod for validation at every boundary · Vitest for tests
 - Arc testnet via Circle developer-controlled wallets (`@circle-fin/developer-controlled-wallets`)
 
+## Open source — what you can actually take from this repo
+
+The whole repo is MIT-licensed and public, but one part was built specifically
+to be lifted into _your own_ project, independent of everything else here:
+
+**[`packages/agent-policy-gate/`](packages/agent-policy-gate/)** — a
+standalone, zero-dependency TypeScript package. No React, no Next.js, no
+database, no blockchain SDK. Two pure functions —
+`evaluatePolicy` / `evaluateApproval` — that decide whether an AI
+agent-proposed payment is **allowed**, **needs human approval**, or
+**rejected**, and explain why.
+
+**The selling point:** the moment an LLM agent can propose a payment, you
+need something between "proposed" and "money moves" that the agent itself
+has no path to bypass. That's not a feature of _this_ app — it's a generic
+problem anyone wiring an AI agent into a payments flow on Arc, Circle, or
+anywhere else will hit. This package is that layer, extracted so you don't
+have to build it yourself or adopt this app's business logic, UI, Gemini
+integration, or EUR-specific money handling to get it.
+
+**How you'd use it in your own project:**
+
+```ts
+import { evaluatePolicy } from "agent-policy-gate"; // copy the folder, or npm install once published
+
+const result = evaluatePolicy({
+  amountCents: 24000,
+  actor: { name: "Liam", role: "employee" },
+  payee: {
+    name: "ABC Coffee",
+    approved: true,
+    monthlyLimitCents: 80000,
+    spentThisMonthCents: 46000,
+  },
+  businessState: {
+    balanceCents,
+    obligationsNext30DaysCents,
+    todaySpentByActorCents,
+    todaySpentByBusinessCents,
+  },
+  policies, // your own limits — see the package README
+  formatAmount: (c) => `€${(c / 100).toFixed(2)}`, // your currency, not ours
+});
+// result.decision: "allowed" | "needs_approval" | "rejected"
+```
+
+Supply your own `Policies`/`Actor`/`Payee`/`formatAmount` — then, critically,
+call it **again server-side immediately before executing**, exactly as this
+app's own [`lib/payments/execute.ts`](lib/payments/execute.ts) does. Never
+trust the agent's proposal, an earlier call's decision, or anything the
+client sent — that's the one rule the whole architecture above is built on.
+
+Full docs, the decision rules, and what it deliberately _doesn't_ do (no
+execution, no wallet, not the only check) are in the package's own
+[README](packages/agent-policy-gate/README.md) — including a direct
+comparison against the closest prior art we found in the Arc ecosystem
+(`arc-mirror-kit`), so the "this is actually different" claim is checkable,
+not just asserted.
+
 ## Getting started
 
 ```bash
