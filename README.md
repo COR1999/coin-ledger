@@ -88,6 +88,7 @@ wallets only.
 | `CIRCLE_WALLET_ADDRESS`    | Only if `PAYMENT_PROVIDER=arc` | The business's Circle-managed wallet address (created via `scripts/create-arc-wallet.ts`).                                                                                                                                   |
 | `ARC_RPC_URL`              | No                             | Arc RPC endpoint from `arc-canteen rpc-url`. Contains a Canteen token — treat as a secret. Not currently used for execution (Circle's API is called directly); kept for traction tracking.                                   |
 | `ARC_PRIVATE_KEY`          | No                             | Unused — the confirmed architecture is Circle developer-controlled wallets, not a raw-key wallet. Left for reference only.                                                                                                   |
+| `WAITLIST_ADMIN_SECRET`    | No                             | Gates `/admin/waitlist`. See **Admin** below.                                                                                                                                                                                |
 
 ## Scripts
 
@@ -143,6 +144,39 @@ Other things worth showing: a failed payment's **Retry** button on
 **Approvals** (the mock provider fails ~10% of submissions); the full
 history and explorer links on **Transactions**; and role-gated editing on
 **Policies** (read-only for Liam, editable for Mario).
+
+## Admin
+
+**Viewing waitlist signups** (`/admin/waitlist`): visit the URL with
+`?secret=<WAITLIST_ADMIN_SECRET>` appended, e.g.
+
+```
+https://financial-operator.vercel.app/admin/waitlist?secret=<your-secret>
+```
+
+The secret itself lives only in your deployment platform's env var store
+(set via `vercel env add WAITLIST_ADMIN_SECRET production` / `preview`) —
+it is never committed, never printed in logs, and not in this repo. If
+you've lost it, generate a new one and overwrite it:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+vercel env rm WAITLIST_ADMIN_SECRET production
+vercel env add WAITLIST_ADMIN_SECRET production   # paste the new value
+```
+
+**Why a secret, not a role check:** the page originally gated on
+`actor.role === "owner"`, which looked right (Mario's workspace, owner
+only) but wasn't — this app has no real authentication (out of scope by
+design, see root `CLAUDE.md`), so "owner" is the _default_ identity for
+any visitor with no cookie at all. On localhost that only ever meant the
+one person running it; deployed publicly it meant anyone, with zero
+steps — confirmed live via a cookieless `curl` request returning `200`
+within minutes of the first deployment (see `BUILD_LOG.md`, 2026-10-03).
+`WAITLIST_ADMIN_SECRET` is a real, out-of-band secret instead, compared
+with a constant-time check so response timing can't leak it. Locally,
+with the env var unset, the old role check still works unchanged — it's
+only a real gate once deployed with the secret configured.
 
 ## Layout
 
