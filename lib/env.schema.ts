@@ -25,6 +25,14 @@ const baseEnvSchema = z.object({
   // Caps chat requests per IP per hour — protects the shared Gemini free-tier
   // quota from a single visitor exhausting it on a public demo deployment.
   CHAT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(10),
+  // Gates /admin/waitlist. "Production auth" is explicitly out of scope for
+  // this build (see root CLAUDE.md), but that can't mean real collected PII
+  // (names, emails) sits behind no real check — the owner-role check it
+  // originally used isn't one, since "owner" is the *default* identity for
+  // any visitor with no cookie at all (see BUILD_LOG.md, 2026-10-03). Unset
+  // in local dev is fine (the page still works via the old role check
+  // there); required to actually view the page once deployed publicly.
+  WAITLIST_ADMIN_SECRET: z.string().min(1).optional(),
 });
 
 export const envSchema = baseEnvSchema.superRefine((env, ctx) => {

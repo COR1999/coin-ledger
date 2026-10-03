@@ -73,4 +73,17 @@ describe("parseEnv", () => {
       parseEnv({ GOOGLE_API_KEY: "test-key", CHAT_RATE_LIMIT_PER_HOUR: "0" }),
     ).toThrow(/CHAT_RATE_LIMIT_PER_HOUR/);
   });
+
+  it("WAITLIST_ADMIN_SECRET is optional and unset by default", () => {
+    const env = parseEnv({ GOOGLE_API_KEY: "test-key" });
+    expect(env.WAITLIST_ADMIN_SECRET).toBeUndefined();
+  });
+
+  it("accepts a WAITLIST_ADMIN_SECRET when provided", () => {
+    const env = parseEnv({
+      GOOGLE_API_KEY: "test-key",
+      WAITLIST_ADMIN_SECRET: "a-real-secret",
+    });
+    expect(env.WAITLIST_ADMIN_SECRET).toBe("a-real-secret");
+  });
 });
