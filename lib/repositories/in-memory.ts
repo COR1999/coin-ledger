@@ -88,6 +88,19 @@ class InMemorySupplierRepository implements SupplierRepository {
     const found = this.suppliers.find((s) => s.id === id);
     return found ? clone(found) : null;
   }
+  async recordSpendCents(id: string, amountCents: number): Promise<Supplier> {
+    const index = this.suppliers.findIndex((s) => s.id === id);
+    if (index === -1) {
+      throw new Error(`Unknown supplier: ${id}`);
+    }
+    const updated = {
+      ...this.suppliers[index],
+      spentThisMonthCents:
+        this.suppliers[index].spentThisMonthCents + amountCents,
+    };
+    this.suppliers[index] = updated;
+    return clone(updated);
+  }
 }
 
 class InMemoryTransactionRepository implements TransactionRepository {

@@ -307,6 +307,7 @@ async function executePaymentExclusive(
       txHash: status.txHash,
     });
     await repos.business.adjustBalanceCents(-proposal.amountCents);
+    await repos.suppliers.recordSpendCents(supplier.id, proposal.amountCents);
     await repos.transactions.add({
       id: `tx-exec-${proposalId}`,
       date: SEED_TODAY,

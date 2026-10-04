@@ -345,6 +345,47 @@ describe("executePayment", () => {
     expect(updated!.status).toBe("rejected");
   });
 
+  it("updates a supplier's month-to-date spend on execution, enforcing the monthly limit on the next payment", async () => {
+    // Local Veg seed: €1,500 monthly limit, €300 already spent this month.
+    const first = await createApprovedProposal(repos, {
+      supplierId: "local-veg",
+      amountCents: eur(1_000),
+      proposedByActorId: "mario",
+    });
+    const provider = createMockProvider();
+
+    await executePayment(first.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
+
+    const supplierAfterFirst = await repos.suppliers.getById("local-veg");
+    expect(supplierAfterFirst!.spentThisMonthCents).toBe(eur(1_300));
+
+    // A further €300 would bring month-to-date spend to €1,600, breaching
+    // the €1,500 monthly limit — the previously-stale seed value (never
+    // updated by a real execution) would have wrongly allowed this.
+    const second = await createApprovedProposal(repos, {
+      supplierId: "local-veg",
+      amountCents: eur(300),
+      proposedByActorId: "mario",
+    });
+
+    try {
+      await executePayment(second.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      });
+      throw new Error("expected executePayment to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ExecutionError);
+      expect((e as ExecutionError).code).toBe("POLICY_REJECTED");
+    }
+
+    const updatedSecond = await repos.proposals.getById(second.id);
+    expect(updatedSecond!.status).toBe("rejected");
+  });
+
   it("rejects retrying a rejected proposal", async () => {
     const proposal = await createApprovedProposal(repos);
     await repos.proposals.update(proposal.id, { status: "rejected" });

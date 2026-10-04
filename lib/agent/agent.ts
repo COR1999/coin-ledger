@@ -5,7 +5,7 @@ import {
   type Content,
   type GenerateContentResponse,
 } from "@google/genai";
-import type { Actor } from "@/lib/domain/types";
+import type { Actor, Supplier } from "@/lib/domain/types";
 import type { Repositories } from "@/lib/repositories/types";
 import { toolDefinitions, executeTool } from "./tools";
 import { formatEuros } from "@/lib/money";
@@ -91,9 +91,15 @@ function buildSystemPrompt(
     minimumReserveCents: number;
     businessDailyLimitCents: number;
   },
+  businessName: string,
+  suppliers: readonly Pick<Supplier, "id" | "name">[],
 ): string {
   const roleLimits = policies.roles[actor.role];
-  return `You are the financial operator for Mario's Coffee, a small café. You help staff manage payments safely.
+  const knownSuppliers =
+    suppliers.length > 0
+      ? suppliers.map((s) => `${s.name} (${s.id})`).join(", ")
+      : "none yet";
+  return `You are the financial operator for ${businessName}. You help staff manage payments safely.
 
 You are speaking with ${actor.name} (${actor.role}).
 
@@ -107,7 +113,7 @@ Business rules:
 - Minimum reserve: ${formatEuros(policies.minimumReserveCents)}
 - Business daily limit: ${formatEuros(policies.businessDailyLimitCents)}
 
-Known suppliers: ABC Coffee (abc-coffee), Local Veg Supplier (local-veg), Unknown Vendor Ltd (unknown-vendor).
+Known suppliers: ${knownSuppliers}.
 
 RULES:
 - Use tools to look up real data. Never invent numbers.
@@ -137,7 +143,11 @@ export async function runAgent(
   repos: Repositories,
 ): Promise<AgentResponse> {
   const client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
-  const policies = await repos.policies.get();
+  const [policies, business, suppliers] = await Promise.all([
+    repos.policies.get(),
+    repos.business.get(),
+    repos.suppliers.list(),
+  ]);
 
   const contents: Content[] = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -165,7 +175,12 @@ export async function runAgent(
           model,
           contents,
           config: {
-            systemInstruction: buildSystemPrompt(actor, policies),
+            systemInstruction: buildSystemPrompt(
+              actor,
+              policies,
+              business.name,
+              suppliers,
+            ),
             tools: [{ functionDeclarations: toolDefinitions }],
           },
         }),
