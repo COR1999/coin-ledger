@@ -55,11 +55,44 @@ export interface StatusPollOptions {
   maxAttempts?: number;
 }
 
+/**
+ * Per-proposal execution lock. Two concurrent calls for the same proposal
+ * (a double-click on Approve, or a retry racing the original request) must
+ * not both reach the provider or both mutate the balance — every in-memory
+ * repository here is a plain object with no locking of its own, so without
+ * this, two interleaved calls can each pass the status guards before either
+ * writes "executing" and both submit/execute independently. Keyed by
+ * proposalId only; unrelated proposals still execute concurrently.
+ */
+const proposalLocks = new Map<string, Promise<unknown>>();
+
+function runExclusive<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = proposalLocks.get(key) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  const tail = run.catch(() => undefined);
+  proposalLocks.set(key, tail);
+  tail.finally(() => {
+    if (proposalLocks.get(key) === tail) proposalLocks.delete(key);
+  });
+  return run;
+}
+
 export async function executePayment(
   proposalId: string,
   repos: Repositories,
   provider: PaymentProvider,
   pollOptions: StatusPollOptions = {},
+): Promise<ExecutionResult> {
+  return runExclusive(proposalId, () =>
+    executePaymentExclusive(proposalId, repos, provider, pollOptions),
+  );
+}
+
+async function executePaymentExclusive(
+  proposalId: string,
+  repos: Repositories,
+  provider: PaymentProvider,
+  pollOptions: StatusPollOptions,
 ): Promise<ExecutionResult> {
   const pollIntervalMs = pollOptions.intervalMs ?? STATUS_POLL_INTERVAL_MS;
   const pollMaxAttempts = pollOptions.maxAttempts ?? STATUS_POLL_MAX_ATTEMPTS;
@@ -203,84 +236,108 @@ export async function executePayment(
     );
   }
 
-  const attemptNumber = proposal.attempts + 1;
-  await repos.proposals.update(proposalId, {
-    status: "executing",
-    attempts: attemptNumber,
-  });
+  // Resume rather than resubmit: if an earlier call already reached the
+  // provider (paymentId stored) and the proposal is still "executing", the
+  // outcome is unknown, not failed — a prior poll may simply have exhausted
+  // its attempts, or the process may have been interrupted mid-poll.
+  // Submitting again with a fresh idempotency key would risk a genuine
+  // double payment; polling the same paymentId again is always safe.
+  const resuming = proposal.status === "executing" && !!proposal.paymentId;
+  let paymentId: string;
 
-  const idempotencyKey = deterministicIdempotencyKey(
-    `proposal-${proposalId}-${proposal.createdAt}-attempt-${attemptNumber}`,
-  );
-
-  try {
-    const submitResult = await provider.submit({
-      idempotencyKey,
-      to: supplier.walletAddress,
-      amount: formatCents(proposal.amountCents),
-      currency: "EURC",
-    });
-
+  if (resuming) {
+    paymentId = proposal.paymentId!;
+  } else {
+    const attemptNumber = proposal.attempts + 1;
     await repos.proposals.update(proposalId, {
-      paymentId: submitResult.paymentId,
+      status: "executing",
+      attempts: attemptNumber,
     });
 
-    let status: PaymentStatus = { status: "pending" };
-    for (let attempt = 0; attempt < pollMaxAttempts; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      status = await provider.getStatus(submitResult.paymentId);
-      if (status.status !== "pending") break;
-    }
+    const idempotencyKey = deterministicIdempotencyKey(
+      `proposal-${proposalId}-${proposal.createdAt}-attempt-${attemptNumber}`,
+    );
 
-    if (status.status === "confirmed") {
-      await repos.proposals.update(proposalId, {
-        status: "executed",
-        txHash: status.txHash,
+    try {
+      const submitResult = await provider.submit({
+        idempotencyKey,
+        to: supplier.walletAddress,
+        amount: formatCents(proposal.amountCents),
+        currency: "EURC",
       });
-      await repos.business.setBalanceCents(
-        business.currentBalanceCents - proposal.amountCents,
-      );
-      await repos.transactions.add({
-        id: `tx-exec-${proposalId}`,
-        date: SEED_TODAY,
-        // Several executions can share the same display `date` (the fixed
-        // demo-anchor date) — createdAt is the real moment of execution, so
-        // recentTransactions can still sort them in true chronological order.
-        createdAt: new Date().toISOString(),
-        description: `${supplier.name} — ${proposal.reason}`,
-        category: "Supplier",
-        amountCents: -proposal.amountCents,
-        supplierId: supplier.id,
-        txHash: status.txHash,
-        proposalId: proposal.id,
-        proposedByActorId: proposal.proposedByActorId,
-      });
-    } else if (status.status === "failed") {
+      paymentId = submitResult.paymentId;
+      await repos.proposals.update(proposalId, { paymentId });
+    } catch (error) {
+      // Nothing was accepted by the provider — safe to mark failed; a later
+      // retry submits fresh with a new idempotency key.
       await repos.proposals.update(proposalId, {
         status: "failed",
-        failureReason: status.failureReason,
+        failureReason:
+          error instanceof Error ? error.message : "Unknown provider error",
       });
+      throw new ExecutionError(
+        `Payment provider error: ${error instanceof Error ? error.message : "Unknown"}`,
+        "PROVIDER_FAILED",
+      );
     }
+  }
 
-    const updatedProposal = await repos.proposals.getById(proposalId);
-    return {
-      proposal: updatedProposal!,
-      paymentId: submitResult.paymentId,
-      status: status.status,
-      txHash: status.txHash,
-      onChainAmount: formatOnChainAmount(proposal.amountCents),
-      failureReason: status.failureReason,
-    };
+  let status: PaymentStatus;
+  try {
+    status = { status: "pending" };
+    for (let attempt = 0; attempt < pollMaxAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      status = await provider.getStatus(paymentId);
+      if (status.status !== "pending") break;
+    }
   } catch (error) {
-    if (error instanceof ExecutionError) throw error;
-    await repos.proposals.update(proposalId, {
-      status: "failed",
-      failureReason:
-        error instanceof Error ? error.message : "Unknown provider error",
-    });
+    // The provider accepted the payment but its outcome can't be read right
+    // now — leave the proposal in "executing" with paymentId set so the next
+    // call resumes polling instead of resubmitting or being marked failed
+    // for a payment that may have actually gone through.
     throw new ExecutionError(
-      `Payment provider error: ${error instanceof Error ? error.message : "Unknown"}`,
+      `Payment provider error while checking status: ${error instanceof Error ? error.message : "Unknown"}`,
       "PROVIDER_FAILED",
     );
   }
+
+  if (status.status === "confirmed") {
+    await repos.proposals.update(proposalId, {
+      status: "executed",
+      txHash: status.txHash,
+    });
+    await repos.business.adjustBalanceCents(-proposal.amountCents);
+    await repos.transactions.add({
+      id: `tx-exec-${proposalId}`,
+      date: SEED_TODAY,
+      // Several executions can share the same display `date` (the fixed
+      // demo-anchor date) — createdAt is the real moment of execution, so
+      // recentTransactions can still sort them in true chronological order.
+      createdAt: new Date().toISOString(),
+      description: `${supplier.name} — ${proposal.reason}`,
+      category: "Supplier",
+      amountCents: -proposal.amountCents,
+      supplierId: supplier.id,
+      txHash: status.txHash,
+      proposalId: proposal.id,
+      proposedByActorId: proposal.proposedByActorId,
+    });
+  } else if (status.status === "failed") {
+    await repos.proposals.update(proposalId, {
+      status: "failed",
+      failureReason: status.failureReason,
+    });
+  }
+  // else still "pending": leave status "executing" with paymentId set —
+  // resumable by a later call (e.g. the Retry action) instead of lost.
+
+  const updatedProposal = await repos.proposals.getById(proposalId);
+  return {
+    proposal: updatedProposal!,
+    paymentId,
+    status: status.status,
+    txHash: status.txHash,
+    onChainAmount: formatOnChainAmount(proposal.amountCents),
+    failureReason: status.failureReason,
+  };
 }

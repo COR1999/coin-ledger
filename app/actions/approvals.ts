@@ -214,7 +214,11 @@ export async function retryPayment(proposalId: string): Promise<ActionResult> {
     // but a later turn in the same request crashed before reaching
     // auto-execute), the proposal is stuck there with no failureReason and
     // no other recovery path, so retry covers it the same as "failed".
-    const retryableStatuses = ["failed", "approved", "confirmed"];
+    // "executing" covers the case where a prior call submitted the payment
+    // but the confirmation poll exhausted its attempts (or the server was
+    // interrupted) before learning the outcome — executePayment resumes by
+    // polling the same paymentId rather than submitting a second payment.
+    const retryableStatuses = ["failed", "approved", "confirmed", "executing"];
     if (!retryableStatuses.includes(proposal.status)) {
       return {
         success: false,

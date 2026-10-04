@@ -18,6 +18,41 @@ describe("in-memory repositories", () => {
     expect((await a.business.get()).currentBalanceCents).toBe(eur(1_000));
   });
 
+  it("applies a balance delta relative to the current value, not a stale read", async () => {
+    const repos = createInMemoryRepositories();
+    await repos.business.adjustBalanceCents(-eur(50));
+    expect((await repos.business.get()).currentBalanceCents).toBe(
+      eur(18_420) - eur(50),
+    );
+    await repos.business.adjustBalanceCents(-eur(30));
+    expect((await repos.business.get()).currentBalanceCents).toBe(
+      eur(18_420) - eur(50) - eur(30),
+    );
+  });
+
+  it("does not record a second ledger entry for a transaction id that already exists", async () => {
+    const repos = createInMemoryRepositories();
+    const transaction = {
+      id: "tx-dup-test",
+      date: "2026-09-30",
+      createdAt: "2026-09-30T10:00:00.000Z",
+      description: "First add",
+      category: "Supplier",
+      amountCents: -eur(50),
+    };
+    await repos.transactions.add(transaction);
+    await repos.transactions.add({
+      ...transaction,
+      description: "Second add with the same id",
+    });
+
+    const matches = (await repos.transactions.list()).filter(
+      (t) => t.id === "tx-dup-test",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].description).toBe("First add");
+  });
+
   it("resolves suppliers by id and returns null for unknown ids", async () => {
     const repos = createInMemoryRepositories();
     expect((await repos.suppliers.getById("abc-coffee"))?.name).toBe(

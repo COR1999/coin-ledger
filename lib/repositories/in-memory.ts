@@ -47,6 +47,13 @@ class InMemoryBusinessRepository implements BusinessRepository {
     this.business = { ...this.business, currentBalanceCents: cents };
     return clone(this.business);
   }
+  async adjustBalanceCents(deltaCents: number): Promise<Business> {
+    this.business = {
+      ...this.business,
+      currentBalanceCents: this.business.currentBalanceCents + deltaCents,
+    };
+    return clone(this.business);
+  }
 }
 
 class InMemoryActorRepository implements ActorRepository {
@@ -92,6 +99,11 @@ class InMemoryTransactionRepository implements TransactionRepository {
     return clone(this.transactions);
   }
   async add(transaction: Transaction): Promise<Transaction> {
+    // Transaction ids must be unique — a second add with the same id (e.g. a
+    // duplicate execution slipping past the caller's own guards) is a no-op
+    // rather than a second ledger entry for money that only moved once.
+    const existing = this.transactions.find((t) => t.id === transaction.id);
+    if (existing) return clone(existing);
     this.transactions.push(clone(transaction));
     return clone(transaction);
   }

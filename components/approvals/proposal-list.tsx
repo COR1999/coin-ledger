@@ -185,6 +185,16 @@ export function ProposalList({
               </p>
             )}
 
+          {p.status === "executing" &&
+            !p.txHash &&
+            actionState[p.id]?.status !== "error" && (
+              <p className="mt-2 text-xs text-amber-600">
+                This payment was submitted but its outcome wasn&apos;t confirmed
+                in time. Retry to check the result — this resumes checking the
+                same payment rather than sending a second one.
+              </p>
+            )}
+
           {(actionState[p.id]?.txHash ?? p.txHash) && (
             <div className="mt-2 rounded-sm border border-emerald-600/30 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
               <p className="font-mono">
@@ -254,7 +264,9 @@ export function ProposalList({
               )}
 
             {(p.status === "failed" ||
-              ((p.status === "approved" || p.status === "confirmed") &&
+              ((p.status === "approved" ||
+                p.status === "confirmed" ||
+                p.status === "executing") &&
                 !p.txHash)) &&
               (currentActorRole === "owner" ||
                 currentActorRole === "accountant") && (

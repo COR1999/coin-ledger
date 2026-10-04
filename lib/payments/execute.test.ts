@@ -407,4 +407,145 @@ describe("executePayment", () => {
     expect(execTx!.proposalId).toBe(proposal.id);
     expect(execTx!.amountCents).toBe(-eur(50));
   });
+
+  it("applies both deductions when two different proposals execute concurrently (no lost update)", async () => {
+    const proposalA = await createApprovedProposal(repos, {
+      amountCents: eur(40),
+      proposedByActorId: "liam",
+    });
+    const proposalB = await createApprovedProposal(repos, {
+      amountCents: eur(1_000),
+      proposedByActorId: "mario",
+    });
+    const provider = createMockProvider();
+
+    const [resultA, resultB] = await Promise.all([
+      executePayment(proposalA.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+      executePayment(proposalB.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ]);
+
+    expect(resultA.status).toBe("confirmed");
+    expect(resultB.status).toBe("confirmed");
+
+    const business = await repos.business.get();
+    expect(business.currentBalanceCents).toBe(
+      eur(18_420) - eur(40) - eur(1_000),
+    );
+  });
+
+  it("serializes concurrent calls for the same proposal — only one execution happens", async () => {
+    const proposal = await createApprovedProposal(repos, {
+      amountCents: eur(50),
+    });
+    const provider = createMockProvider();
+
+    const results = await Promise.allSettled([
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+      ExecutionError,
+    );
+    expect(
+      ((rejected[0] as PromiseRejectedResult).reason as ExecutionError).code,
+    ).toBe("ALREADY_EXECUTED");
+
+    const business = await repos.business.get();
+    expect(business.currentBalanceCents).toBe(eur(18_420) - eur(50));
+
+    const txs = await repos.transactions.list();
+    expect(txs.filter((t) => t.proposalId === proposal.id)).toHaveLength(1);
+  });
+
+  it("resumes polling the same payment after a timeout instead of resubmitting", async () => {
+    const proposal = await createApprovedProposal(repos, {
+      amountCents: eur(50),
+    });
+    let submitCount = 0;
+    let resolved = false;
+    const provider: PaymentProvider = {
+      submit: async () => {
+        submitCount += 1;
+        return { paymentId: "pay-resume", status: "pending" };
+      },
+      getStatus: async () =>
+        resolved
+          ? { status: "confirmed", txHash: "0xresumed" }
+          : { status: "pending" },
+    };
+
+    const timedOut = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 2,
+    });
+    expect(timedOut.status).toBe("pending");
+
+    const stuck = await repos.proposals.getById(proposal.id);
+    expect(stuck!.status).toBe("executing");
+    expect(stuck!.paymentId).toBe("pay-resume");
+
+    resolved = true;
+    const resumed = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 2,
+    });
+
+    expect(resumed.status).toBe("confirmed");
+    expect(resumed.txHash).toBe("0xresumed");
+    // Never resubmitted — resumed polling the same payment instead of
+    // sending a second real payment for an outcome that was merely unknown.
+    expect(submitCount).toBe(1);
+
+    const business = await repos.business.get();
+    expect(business.currentBalanceCents).toBe(eur(18_420) - eur(50));
+
+    const updated = await repos.proposals.getById(proposal.id);
+    expect(updated!.status).toBe("executed");
+    expect(updated!.attempts).toBe(1);
+  });
+
+  it("leaves the proposal resumable (not falsely failed) when checking status throws", async () => {
+    const proposal = await createApprovedProposal(repos, {
+      amountCents: eur(50),
+    });
+    const provider: PaymentProvider = {
+      submit: async () => ({ paymentId: "pay-flaky", status: "pending" }),
+      getStatus: async () => {
+        throw new Error("network blip");
+      },
+    };
+
+    await expect(
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ).rejects.toThrow(ExecutionError);
+
+    const stuck = await repos.proposals.getById(proposal.id);
+    expect(stuck!.status).toBe("executing");
+    expect(stuck!.paymentId).toBe("pay-flaky");
+
+    const business = await repos.business.get();
+    // Outcome unknown — balance must stay untouched, not optimistically
+    // deducted or reverted.
+    expect(business.currentBalanceCents).toBe(eur(18_420));
+  });
 });

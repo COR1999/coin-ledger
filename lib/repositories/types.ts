@@ -16,7 +16,15 @@ import type {
 
 export interface BusinessRepository {
   get(): Promise<Business>;
+  /** Sets an absolute balance. Only for seeding/onboarding — never call this
+   * from a code path that read the balance earlier in the same async flow,
+   * since the write will silently discard any change made in between. Use
+   * `adjustBalanceCents` for any balance change derived from an event. */
   setBalanceCents(cents: number): Promise<Business>;
+  /** Atomically applies a signed delta to the current balance (negative for
+   * money out). Safe under concurrent calls — unlike `setBalanceCents`, it
+   * never depends on a balance value read before an intervening await. */
+  adjustBalanceCents(deltaCents: number): Promise<Business>;
 }
 
 /** Actors are fixed per workspace (no sign-up flow), so read-only. */
