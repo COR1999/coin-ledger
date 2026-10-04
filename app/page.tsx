@@ -1,4 +1,14 @@
-import { ShieldCheck, Sparkles, Zap } from "lucide-react";
+import {
+  Brain,
+  ExternalLink,
+  Link2,
+  MessageSquare,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  Zap,
+} from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 import { returnToDemoAction } from "@/app/actions/onboarding";
@@ -6,8 +16,38 @@ import { DemoCtaButton } from "@/components/marketing/demo-cta-button";
 import { WaitlistForm } from "@/components/marketing/waitlist-form";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { arcExplorerTxUrl } from "@/lib/config";
 import { DEMO_WORKSPACE_ID } from "@/lib/repositories/singleton";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
+
+// A real settled Arc testnet payment (Phase 6 demo story 2, see BUILD_LOG.md
+// "Testnet transactions") — linked directly so a visitor can check the
+// "provable, not just logged" claim themselves instead of taking it on faith.
+const SAMPLE_TX_HASH =
+  "0x56374933cd5e3a18b16d8a48e2e4419a0c4ec27fb307d1b12cdae80242965f6b";
+
+const HOW_IT_WORKS = [
+  {
+    icon: MessageSquare,
+    title: "Ask",
+    body: '"Pay ABC Coffee €2,400 for this month\'s beans."',
+  },
+  {
+    icon: Brain,
+    title: "Propose",
+    body: "The agent drafts the payment and explains its reasoning. It cannot send it.",
+  },
+  {
+    icon: UserCheck,
+    title: "Decide",
+    body: "Your policies and your approval decide — not the AI, every time.",
+  },
+  {
+    icon: Link2,
+    title: "Settle",
+    body: "Executes on Arc in under a second, with a transaction hash anyone can check.",
+  },
+] as const;
 
 /**
  * Public marketing landing page. The product itself lives at /app (the
@@ -95,6 +135,46 @@ export default async function LandingPage() {
           )}
         </section>
 
+        {/* Product preview — a real screenshot, not a mockup, so a cold
+            visitor sees the actual dashboard before trying it. Hidden below
+            sm: at 375px the wide screenshot shrinks to illegible text, so it
+            costs scroll weight for zero value — the "How it works" strip
+            below already carries the same point in text on mobile. */}
+        <section className="mx-auto hidden max-w-5xl px-4 pb-16 sm:block sm:px-6">
+          <div className="overflow-hidden rounded-lg border shadow-sm">
+            <Image
+              src="/dashboard-preview.png"
+              alt="Coin Ledger dashboard showing upcoming obligations and recent transactions, each with on-chain verification"
+              width={2208}
+              height={1044}
+              className="h-auto w-full"
+              priority
+            />
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section className="border-t py-16">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6">
+            <h2 className="font-serif text-center text-xl font-semibold">
+              How a payment actually happens
+            </h2>
+            <div className="mt-8 grid gap-6 sm:grid-cols-4">
+              {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
+                <div key={title} className="text-center">
+                  <div className="mx-auto flex size-10 items-center justify-center rounded-full border-2 border-accent text-accent">
+                    <Icon className="size-5" aria-hidden />
+                  </div>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {i + 1}. {title}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Value props */}
         <section className="border-t bg-muted/30 py-16">
           <div className="mx-auto grid max-w-5xl gap-6 px-4 sm:grid-cols-3 sm:px-6">
@@ -135,6 +215,15 @@ export default async function LandingPage() {
                 Every executed payment carries a real transaction hash,
                 checkable on a public explorer — independent proof it happened,
                 for the exact amount, with nothing to take on faith.
+                <a
+                  href={arcExplorerTxUrl(SAMPLE_TX_HASH)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 flex items-center gap-1 font-medium text-primary underline underline-offset-2"
+                >
+                  See a real settled payment{" "}
+                  <ExternalLink className="size-3.5" aria-hidden />
+                </a>
               </CardContent>
             </Card>
           </div>
@@ -158,6 +247,24 @@ export default async function LandingPage() {
           </Card>
         </section>
       </main>
+
+      <footer className="border-t py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-4 text-xs text-muted-foreground sm:flex-row sm:justify-between sm:px-6">
+          <p>
+            Testnet demo — no real funds move. Built for the Tameion hackathon
+            (Canteen × Circle).
+          </p>
+          <a
+            href="https://github.com/COR1999/coin-ledger"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 font-medium text-foreground underline underline-offset-2"
+          >
+            View source on GitHub{" "}
+            <ExternalLink className="size-3.5" aria-hidden />
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

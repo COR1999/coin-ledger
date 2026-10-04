@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import { brandThemeCssVars, getBrandTheme } from "@/lib/branding/theme";
 import {
@@ -26,10 +27,26 @@ const fraunces = Fraunces({
   weight: ["500", "600"],
 });
 
+const SITE_URL = "https://financial-operator.vercel.app";
+const DESCRIPTION =
+  "AI proposes, rules authorize, humans approve, infrastructure executes.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Coin Ledger",
-  description:
-    "AI proposes, rules authorize, humans approve, infrastructure executes.",
+  description: DESCRIPTION,
+  openGraph: {
+    title: "Coin Ledger",
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Coin Ledger",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Coin Ledger",
+    description: DESCRIPTION,
+  },
 };
 
 export default async function RootLayout({
@@ -57,7 +74,10 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
       style={brandThemeCssVars(theme) as CSSProperties}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
