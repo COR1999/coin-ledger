@@ -287,6 +287,7 @@ export async function rejectProposal(
 ): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
+    const actor = await getCurrentActor();
     const repos = getRepositories(await getCurrentWorkspaceId());
 
     const proposal = await repos.proposals.getById(proposalId);
@@ -298,6 +299,26 @@ export async function rejectProposal(
       return {
         success: false,
         message: `Cannot reject a proposal with status "${proposal.status}"`,
+      };
+    }
+
+    // Same authority bound as approve/confirm/retry: only a role whose
+    // approval limit covers this amount may reject it. Without this, the
+    // Reject server action was directly callable by any actor (e.g. an
+    // employee, reachable via this demo's own role switcher) regardless of
+    // the UI's owner/accountant-only button gating — the same gap already
+    // found and fixed for retryPayment/confirmProposal.
+    const policies = await repos.policies.get();
+    const approvalCheck = evaluateApproval({
+      approverRole: actor.role,
+      amountCents: proposal.amountCents,
+      policies,
+    });
+
+    if (!approvalCheck.permitted) {
+      return {
+        success: false,
+        message: approvalCheck.reasons.join("; "),
       };
     }
 

@@ -45,6 +45,10 @@ export interface ObligationRepository {
 export interface SupplierRepository {
   list(): Promise<Supplier[]>;
   getById(id: string): Promise<Supplier | null>;
+  /** Atomically adds to a supplier's month-to-date spend. Call only once a
+   * payment actually settles (see lib/payments/execute.ts) — a proposal that
+   * never executes must not count against the monthly limit. */
+  recordSpendCents(id: string, amountCents: number): Promise<Supplier>;
 }
 
 export interface TransactionRepository {

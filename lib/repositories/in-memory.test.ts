@@ -61,6 +61,26 @@ describe("in-memory repositories", () => {
     expect(await repos.suppliers.getById("nope")).toBeNull();
   });
 
+  it("records a payment against a supplier's month-to-date spend", async () => {
+    const repos = createInMemoryRepositories();
+    // Local Veg seeds at €300 already spent this month.
+    const updated = await repos.suppliers.recordSpendCents(
+      "local-veg",
+      eur(300),
+    );
+    expect(updated.spentThisMonthCents).toBe(eur(600));
+    expect(
+      (await repos.suppliers.getById("local-veg"))!.spentThisMonthCents,
+    ).toBe(eur(600));
+  });
+
+  it("rejects recording spend against an unknown supplier", async () => {
+    const repos = createInMemoryRepositories();
+    await expect(
+      repos.suppliers.recordSpendCents("nope", eur(10)),
+    ).rejects.toThrow("Unknown supplier: nope");
+  });
+
   it("creates pending proposals and updates their status", async () => {
     const repos = createInMemoryRepositories();
     const proposal = await repos.proposals.create({
