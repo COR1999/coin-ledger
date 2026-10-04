@@ -142,6 +142,12 @@ export function SafeToSpendCard({
             label="Less minimum reserve"
             cents={-b.minimumReserveCents}
           />
+          {b.committedProposalsCents > 0 ? (
+            <FormulaRow
+              label="Less committed to pending proposals"
+              cents={-b.committedProposalsCents}
+            />
+          ) : null}
           <div className="mt-1 flex items-baseline justify-between border-t pt-1.5 font-medium">
             <dt>Safe to spend</dt>
             <dd className="font-mono tabular-nums">

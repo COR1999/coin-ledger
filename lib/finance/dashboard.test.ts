@@ -21,13 +21,27 @@ describe("safeToSpendBreakdown", () => {
     const b = safeToSpendBreakdown(
       seedBusiness,
       seedObligations,
+      [],
       seedPolicies,
       SEED_TODAY,
     );
     expect(b.balanceCents).toBe(eur(18_420));
     expect(b.obligationsNext30DaysCents).toBe(eur(9_730));
     expect(b.minimumReserveCents).toBe(eur(3_000));
+    expect(b.committedProposalsCents).toBe(eur(0));
     expect(b.safeToSpendCents).toBe(eur(5_690));
+  });
+
+  it("subtracts other in-flight proposals from safe-to-spend", () => {
+    const b = safeToSpendBreakdown(
+      seedBusiness,
+      seedObligations,
+      [{ id: "p1", status: "approved", amountCents: eur(1_000) }],
+      seedPolicies,
+      SEED_TODAY,
+    );
+    expect(b.committedProposalsCents).toBe(eur(1_000));
+    expect(b.safeToSpendCents).toBe(eur(4_690));
   });
 });
 
@@ -110,6 +124,7 @@ describe("buildDashboardData", () => {
     const data = buildDashboardData({
       business: seedBusiness,
       obligations: seedObligations,
+      proposals: [],
       transactions: seedTransactions,
       policies: seedPolicies,
       asOf: SEED_TODAY,

@@ -32,6 +32,7 @@ function state(
     obligationsNext30DaysCents: eur(9_730),
     todaySpentByActorCents: eur(0),
     todaySpentByBusinessCents: eur(0),
+    committedPendingCents: eur(0),
     ...overrides,
   };
 }
@@ -186,6 +187,20 @@ describe("evaluatePolicy — decision scenarios", () => {
     });
     expect(result.decision).toBe("rejected");
     expect(result.reasons.join(" ")).toMatch(/business daily limit/i);
+  });
+
+  it("14. Mario pays €1,000 but €5,000 is already committed to other pending proposals → rejected (breaches reserve)", () => {
+    // Baseline safe-to-spend is €5,690; €5,000 already committed elsewhere
+    // leaves only €690 free, even though nothing has left the balance yet.
+    const result = evaluatePolicy({
+      amountCents: eur(1_000),
+      actor: actor("owner"),
+      supplier: supplier("abc-coffee"),
+      businessState: state({ committedPendingCents: eur(5_000) }),
+      policies,
+    });
+    expect(result.decision).toBe("rejected");
+    expect(result.reasons.join(" ")).toMatch(/safe-to-spend|reserve/i);
   });
 });
 

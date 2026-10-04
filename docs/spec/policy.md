@@ -14,8 +14,10 @@
 
 - **Business daily limit:** €10,000 across all roles.
 - **Safe-to-spend:** reject if `amount > safe-to-spend`, where
-  `safe-to-spend = balance − obligations due in next 30 days − €3,000 minimum reserve`
-  (seed: €18,420 − €9,730 − €3,000 = **€5,690**).
+  `safe-to-spend = balance − obligations due in next 30 days − €3,000 minimum reserve − cash already committed to other in-flight proposals`
+  (seed, no in-flight proposals: €18,420 − €9,730 − €3,000 = **€5,690**). "In-flight" means
+  pending, approved, awaiting confirmation, confirmed or executing — any proposal that
+  hasn't settled yet, since the balance itself only moves once a proposal executes.
 - **Supplier monthly limits** (see `product.md`).
 - **Confirmation threshold:** any payment above **€1,000** requires the executing person to explicitly confirm, including the owner.
 

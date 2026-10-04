@@ -9,6 +9,7 @@ import {
 import type { Obligation } from "@/lib/domain/types";
 import { eur } from "@/lib/money";
 import {
+  committedProposalsCents,
   forecast30Day,
   netCashFlowCents,
   projectedBalanceAfterCents,
@@ -83,6 +84,45 @@ describe("upcomingObligationsCents — horizon boundaries", () => {
     expect(upcomingObligationsCents(obligations, SEED_TODAY, 30)).toBe(
       eur(600),
     );
+  });
+});
+
+describe("committedProposalsCents", () => {
+  const proposals = [
+    { id: "p1", status: "pending", amountCents: eur(100) },
+    { id: "p2", status: "approved", amountCents: eur(200) },
+    { id: "p3", status: "executed", amountCents: eur(300) },
+    { id: "p4", status: "rejected", amountCents: eur(400) },
+    { id: "p5", status: "failed", amountCents: eur(500) },
+  ] as const;
+
+  it("sums only in-flight statuses, excluding settled, rejected and failed ones", () => {
+    expect(committedProposalsCents(proposals)).toBe(eur(300)); // p1 + p2
+  });
+
+  it("excludes the given proposal id from the sum", () => {
+    expect(committedProposalsCents(proposals, "p1")).toBe(eur(200));
+  });
+});
+
+describe("safeToSpendCents — committed proposals", () => {
+  it("subtracts committedProposalsCents from the formula", () => {
+    const safe = safeToSpendCents({
+      balanceCents: eur(18_420),
+      obligationsNext30DaysCents: eur(9_730),
+      minimumReserveCents: eur(3_000),
+      committedProposalsCents: eur(1_000),
+    });
+    expect(safe).toBe(eur(4_690));
+  });
+
+  it("defaults committedProposalsCents to 0 when omitted", () => {
+    const safe = safeToSpendCents({
+      balanceCents: eur(18_420),
+      obligationsNext30DaysCents: eur(9_730),
+      minimumReserveCents: eur(3_000),
+    });
+    expect(safe).toBe(eur(5_690));
   });
 });
 

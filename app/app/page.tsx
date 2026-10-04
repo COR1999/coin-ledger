@@ -28,6 +28,7 @@ export default async function DashboardPage() {
     transactions,
     policies,
     obligations,
+    proposals,
     actors,
     actor,
   ] = await Promise.all([
@@ -36,6 +37,7 @@ export default async function DashboardPage() {
     repos.transactions.list(),
     repos.policies.get(),
     repos.obligations.list(),
+    repos.proposals.list(),
     listActors(),
     getCurrentActor(),
   ]);
@@ -43,6 +45,7 @@ export default async function DashboardPage() {
   const data = buildDashboardData({
     business,
     obligations,
+    proposals,
     transactions,
     policies,
     asOf: SEED_TODAY,

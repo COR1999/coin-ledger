@@ -37,6 +37,10 @@ const result = evaluatePolicy({
     obligationsNext30DaysCents: 973_00,
     todaySpentByActorCents: 0,
     todaySpentByBusinessCents: 0,
+    // Cash already spoken for by other proposals still in flight (approved,
+    // awaiting confirmation, confirmed, or executing) — not yet reflected in
+    // balanceCents. Pass 0 if you don't track in-flight proposals separately.
+    committedPendingCents: 0,
   },
   policies, // your Policies object — see src/types.ts
   formatAmount: (cents) => `€${(cents / 100).toFixed(2)}`,
@@ -77,8 +81,10 @@ the escalation order in `evaluatePolicy` (rule 5 in `src/engine.ts`).
 
 Evaluated so that every applicable reason is reported, not just the first:
 
-1. Any business-wide rule broken (safe-to-spend, business daily limit,
-   payee's own monthly limit) → **rejected**
+1. Any business-wide rule broken (safe-to-spend — balance minus upcoming
+   obligations, the minimum reserve, and cash already committed to other
+   in-flight proposals — business daily limit, payee's own monthly limit)
+   → **rejected**
 2. Amount above the owner's single-payment max (the hard ceiling) →
    **rejected**
 3. The lowest-trust role paying a payee not on its approved list →

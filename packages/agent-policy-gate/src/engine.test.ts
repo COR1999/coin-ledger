@@ -80,6 +80,7 @@ function state(
     obligationsNext30DaysCents: cents(9_730),
     todaySpentByActorCents: 0,
     todaySpentByBusinessCents: 0,
+    committedPendingCents: 0,
     ...overrides,
   };
 }
@@ -151,6 +152,33 @@ describe("evaluatePolicy — decision scenarios", () => {
     });
     expect(result.decision).toBe("rejected");
     expect(result.reasons.join(" ")).toMatch(/safe-to-spend|reserve/i);
+  });
+
+  it("owner pays $500 but $5,600 is already committed to other pending proposals → rejected (breaches reserve)", () => {
+    // Baseline safe-to-spend is $5,690; $5,600 already committed elsewhere
+    // leaves only $90 free, even though nothing has left the balance yet.
+    const result = evaluatePolicy({
+      amountCents: cents(500),
+      actor: actors.owner,
+      payee: payee("coffee"),
+      businessState: state({ committedPendingCents: cents(5_600) }),
+      policies,
+      formatAmount,
+    });
+    expect(result.decision).toBe("rejected");
+    expect(result.reasons.join(" ")).toMatch(/safe-to-spend|reserve/i);
+  });
+
+  it("still allows a payment that fits within what other pending proposals leave free", () => {
+    const result = evaluatePolicy({
+      amountCents: cents(50),
+      actor: actors.owner,
+      payee: payee("coffee"),
+      businessState: state({ committedPendingCents: cents(5_600) }),
+      policies,
+      formatAmount,
+    });
+    expect(result.decision).toBe("allowed");
   });
 
   it("employee pays an approved payee $30 → allowed, no confirmation", () => {

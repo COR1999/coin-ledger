@@ -9,6 +9,7 @@ const healthySafeToSpend: SafeToSpendBreakdown = {
   balanceCents: eur(18_420),
   obligationsNext30DaysCents: eur(9_730),
   minimumReserveCents: eur(3_000),
+  committedProposalsCents: eur(0),
   safeToSpendCents: eur(5_690),
 };
 
@@ -52,6 +53,7 @@ describe("computeAlerts", () => {
         balanceCents: eur(10_000),
         obligationsNext30DaysCents: eur(8_000),
         minimumReserveCents: eur(3_000),
+        committedProposalsCents: eur(0),
         safeToSpendCents: -eur(1_000),
       },
       suppliers: [],

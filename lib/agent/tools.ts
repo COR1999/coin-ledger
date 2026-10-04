@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SEED_TODAY } from "@/lib/data/seed";
 import type { Repositories } from "@/lib/repositories/types";
 import {
+  committedProposalsCents,
   forecast30Day,
   safeToSpendCents,
   upcomingObligationsCents,
@@ -115,13 +116,19 @@ async function buildBusinessState(
   repos: Repositories,
   actorId: string,
 ): Promise<PolicyBusinessState> {
-  const [business, todaySpentByBusiness, todaySpentByActor, obligations] =
-    await Promise.all([
-      repos.business.get(),
-      repos.transactions.spentOnDateCents(SEED_TODAY),
-      repos.transactions.spentOnDateByActorCents(SEED_TODAY, actorId),
-      repos.obligations.list(),
-    ]);
+  const [
+    business,
+    todaySpentByBusiness,
+    todaySpentByActor,
+    obligations,
+    proposals,
+  ] = await Promise.all([
+    repos.business.get(),
+    repos.transactions.spentOnDateCents(SEED_TODAY),
+    repos.transactions.spentOnDateByActorCents(SEED_TODAY, actorId),
+    repos.obligations.list(),
+    repos.proposals.list(),
+  ]);
   const obligationsNext30Days = upcomingObligationsCents(
     obligations,
     SEED_TODAY,
@@ -133,6 +140,7 @@ async function buildBusinessState(
     obligationsNext30DaysCents: obligationsNext30Days,
     todaySpentByActorCents: todaySpentByActor,
     todaySpentByBusinessCents: todaySpentByBusiness,
+    committedPendingCents: committedProposalsCents(proposals),
   };
 }
 
@@ -144,28 +152,32 @@ export async function executeTool(
 ): Promise<string> {
   switch (toolName) {
     case "getBalance": {
-      const [business, policies, obligations] = await Promise.all([
+      const [business, policies, obligations, proposals] = await Promise.all([
         repos.business.get(),
         repos.policies.get(),
         repos.obligations.list(),
+        repos.proposals.list(),
       ]);
       const obligationsTotal = upcomingObligationsCents(
         obligations,
         SEED_TODAY,
         30,
       );
+      const committedPending = committedProposalsCents(proposals);
       const safe = safeToSpendCents({
         balanceCents: business.currentBalanceCents,
         obligationsNext30DaysCents: obligationsTotal,
         minimumReserveCents: policies.minimumReserveCents,
+        committedProposalsCents: committedPending,
       });
       return JSON.stringify({
         currentBalance: formatEuros(business.currentBalanceCents),
         obligationsNext30Days: formatEuros(obligationsTotal),
         minimumReserve: formatEuros(policies.minimumReserveCents),
+        committedToPendingProposals: formatEuros(committedPending),
         safeToSpend: formatEuros(safe),
         formula:
-          "safe-to-spend = balance − obligations (30 days) − minimum reserve",
+          "safe-to-spend = balance − obligations (30 days) − minimum reserve − committed to pending proposals",
       });
     }
 

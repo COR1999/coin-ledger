@@ -36,6 +36,14 @@ export interface PolicyBusinessState {
   todaySpentByActorCents: number;
   /** Total the whole business has already paid today. */
   todaySpentByBusinessCents: number;
+  /**
+   * Sum of other payments already proposed and not yet settled (approved,
+   * awaiting confirmation, confirmed, or executing) — cash effectively
+   * spoken for even though it hasn't left the balance yet. Without this,
+   * two in-flight proposals can each individually clear safe-to-spend and
+   * still overdraw the reserve once both execute.
+   */
+  committedPendingCents: number;
 }
 
 export interface PolicyInput {
@@ -68,7 +76,8 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   const safeToSpend =
     businessState.balanceCents -
     businessState.obligationsNext30DaysCents -
-    policies.minimumReserveCents;
+    policies.minimumReserveCents -
+    businessState.committedPendingCents;
   if (amountCents > safeToSpend) {
     rejections.push(
       `Exceeds safe-to-spend of ${formatAmount(safeToSpend)} (would breach the ${formatAmount(

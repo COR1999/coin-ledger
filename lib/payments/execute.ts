@@ -1,7 +1,10 @@
 import { formatOnChainAmount } from "@/lib/config";
 import { SEED_TODAY } from "@/lib/data/seed";
 import type { PaymentProposal } from "@/lib/domain/types";
-import { upcomingObligationsCents } from "@/lib/finance/engine";
+import {
+  committedProposalsCents,
+  upcomingObligationsCents,
+} from "@/lib/finance/engine";
 import { formatCents } from "@/lib/money";
 import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
 import type { Repositories } from "@/lib/repositories/types";
@@ -104,6 +107,7 @@ export async function executePayment(
     todaySpentByActor,
     actors,
     obligations,
+    proposals,
   ] = await Promise.all([
     repos.business.get(),
     repos.suppliers.getById(proposal.supplierId),
@@ -115,6 +119,7 @@ export async function executePayment(
     ),
     repos.actors.list(),
     repos.obligations.list(),
+    repos.proposals.list(),
   ]);
 
   if (!supplier) {
@@ -146,6 +151,10 @@ export async function executePayment(
       obligationsNext30DaysCents: obligationsNext30Days,
       todaySpentByActorCents: todaySpentByActor,
       todaySpentByBusinessCents: todaySpentByBusiness,
+      // Exclude this proposal's own id — its in-flight status (approved,
+      // awaiting_confirmation, confirmed) would otherwise double-count
+      // against itself in the safe-to-spend re-check.
+      committedPendingCents: committedProposalsCents(proposals, proposalId),
     },
     policies,
   });

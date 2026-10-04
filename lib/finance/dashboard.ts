@@ -6,10 +6,12 @@
 import type {
   Business,
   Obligation,
+  PaymentProposal,
   Policies,
   Transaction,
 } from "@/lib/domain/types";
 import {
+  committedProposalsCents,
   forecast30Day,
   safeToSpendCents,
   upcomingObligationsCents,
@@ -33,12 +35,16 @@ export interface SafeToSpendBreakdown {
   balanceCents: number;
   obligationsNext30DaysCents: number;
   minimumReserveCents: number;
+  /** Cash already spoken for by other in-flight proposals, not yet reflected
+   * in balanceCents — see committedProposalsCents() in lib/finance/engine.ts. */
+  committedProposalsCents: number;
   safeToSpendCents: number;
 }
 
 export function safeToSpendBreakdown(
   business: Business,
   obligations: readonly Obligation[],
+  proposals: readonly Pick<PaymentProposal, "id" | "status" | "amountCents">[],
   policies: Policies,
   asOf: string,
 ): SafeToSpendBreakdown {
@@ -47,14 +53,17 @@ export function safeToSpendBreakdown(
     asOf,
     30,
   );
+  const committedCents = committedProposalsCents(proposals);
   return {
     balanceCents: business.currentBalanceCents,
     obligationsNext30DaysCents,
     minimumReserveCents: policies.minimumReserveCents,
+    committedProposalsCents: committedCents,
     safeToSpendCents: safeToSpendCents({
       balanceCents: business.currentBalanceCents,
       obligationsNext30DaysCents,
       minimumReserveCents: policies.minimumReserveCents,
+      committedProposalsCents: committedCents,
     }),
   };
 }
@@ -141,14 +150,22 @@ export interface DashboardData {
 export function buildDashboardData(params: {
   business: Business;
   obligations: readonly Obligation[];
+  proposals: readonly Pick<PaymentProposal, "id" | "status" | "amountCents">[];
   transactions: readonly Transaction[];
   policies: Policies;
   asOf: string;
 }): DashboardData {
-  const { business, obligations, transactions, policies, asOf } = params;
+  const { business, obligations, proposals, transactions, policies, asOf } =
+    params;
   return {
     business,
-    safeToSpend: safeToSpendBreakdown(business, obligations, policies, asOf),
+    safeToSpend: safeToSpendBreakdown(
+      business,
+      obligations,
+      proposals,
+      policies,
+      asOf,
+    ),
     forecast: forecast30Day(business, obligations, asOf),
     forecastSeries: forecastSeries(business, obligations, asOf, 30),
     obligations: upcomingObligations(obligations, asOf, 30),

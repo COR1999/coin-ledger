@@ -5,6 +5,7 @@
 import type {
   Business,
   Obligation,
+  PaymentProposal,
   Supplier,
   Transaction,
 } from "@/lib/domain/types";
@@ -40,18 +41,56 @@ export function upcomingObligationsCents(
 /**
  * Safe-to-spend: cash that may be committed today without breaching the reserve
  * or upcoming obligations.
- *   safeToSpend = balance − obligationsDueNext30Days − minimumReserve
+ *   safeToSpend = balance − obligationsDueNext30Days − minimumReserve − committedProposals
+ *
+ * `committedProposalsCents` defaults to 0 for callers that don't track
+ * in-flight proposals (e.g. a standalone balance check); see
+ * `committedProposalsCents()` below for why it matters once proposals exist.
  */
 export function safeToSpendCents(params: {
   balanceCents: number;
   obligationsNext30DaysCents: number;
   minimumReserveCents: number;
+  committedProposalsCents?: number;
 }): number {
   return (
     params.balanceCents -
     params.obligationsNext30DaysCents -
-    params.minimumReserveCents
+    params.minimumReserveCents -
+    (params.committedProposalsCents ?? 0)
   );
+}
+
+/** Proposal statuses where the amount is already spoken for but hasn't left
+ * the business balance yet (balance only moves once a proposal reaches
+ * "executed" — see lib/payments/execute.ts). */
+const IN_FLIGHT_PROPOSAL_STATUSES: ReadonlySet<PaymentProposal["status"]> =
+  new Set([
+    "pending",
+    "approved",
+    "awaiting_confirmation",
+    "confirmed",
+    "executing",
+  ]);
+
+/**
+ * Sum of other proposals' amounts that are in flight but not yet settled —
+ * cash effectively committed even though it hasn't left the balance. Without
+ * this, two simultaneously-pending proposals can each individually clear
+ * safe-to-spend and together still overdraw the reserve. Pass
+ * `excludeProposalId` when re-checking a proposal against itself, so its own
+ * in-flight status doesn't double-count against itself.
+ */
+export function committedProposalsCents(
+  proposals: readonly Pick<PaymentProposal, "id" | "status" | "amountCents">[],
+  excludeProposalId?: string,
+): number {
+  return proposals.reduce((sum, p) => {
+    if (p.id === excludeProposalId) return sum;
+    return IN_FLIGHT_PROPOSAL_STATUSES.has(p.status)
+      ? sum + p.amountCents
+      : sum;
+  }, 0);
 }
 
 /** Total spent to a supplier so far this calendar month. */

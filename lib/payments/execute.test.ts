@@ -358,6 +358,34 @@ describe("executePayment", () => {
     }
   });
 
+  it("rejects execution when another in-flight proposal has already committed the safe-to-spend headroom", async () => {
+    // Baseline safe-to-spend: 18,420 - 9,730 - 3,000 = 5,690. A second
+    // proposal already committing 5,600 of that (still "approved", not yet
+    // executed) leaves only 90 free — not enough for this one's 200.
+    const inFlight = await createApprovedProposal(repos, {
+      amountCents: eur(5_600),
+    });
+    const proposal = await createApprovedProposal(repos, {
+      amountCents: eur(200),
+    });
+    const provider = createMockProvider();
+
+    try {
+      await executePayment(proposal.id, repos, provider);
+      throw new Error("expected executePayment to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ExecutionError);
+      expect((e as ExecutionError).code).toBe("POLICY_REJECTED");
+    }
+
+    const updated = await repos.proposals.getById(proposal.id);
+    expect(updated!.status).toBe("rejected");
+
+    // The other in-flight proposal is untouched by this re-check.
+    const untouched = await repos.proposals.getById(inFlight.id);
+    expect(untouched!.status).toBe("approved");
+  });
+
   it("deducts from business balance only on confirmed payment", async () => {
     const proposal = await createApprovedProposal(repos, {
       amountCents: eur(50),
