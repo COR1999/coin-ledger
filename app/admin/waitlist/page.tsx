@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { env } from "@/lib/env";
-import { listWaitlistSignups } from "@/lib/repositories/waitlist";
+import { listWaitlistSignups } from "@/lib/repositories/waitlist-singleton";
 import { DEMO_WORKSPACE_ID } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
@@ -47,7 +47,7 @@ export default async function WaitlistAdminPage({
     notFound();
   }
 
-  const signups = listWaitlistSignups();
+  const signups = await listWaitlistSignups();
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">

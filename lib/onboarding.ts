@@ -23,7 +23,6 @@ import { z } from "zod";
 
 import { seedPolicies } from "@/lib/data/seed";
 import type { Actor, Business, Supplier } from "@/lib/domain/types";
-import { createInMemoryRepositories } from "@/lib/repositories/in-memory";
 import { registerWorkspace } from "@/lib/repositories/workspace-store";
 
 /** A sensible starting cash position for trying the product — not a real balance. */
@@ -54,7 +53,7 @@ export const onboardingInputSchema = z.object({
 export type OnboardingInput = z.infer<typeof onboardingInputSchema>;
 
 /** Builds a visitor's workspace and registers it. Returns the new workspace id. */
-export function createWorkspace(input: OnboardingInput): string {
+export async function createWorkspace(input: OnboardingInput): Promise<string> {
   const workspaceId = `ws-${crypto.randomUUID()}`;
 
   const business: Business = {
@@ -80,17 +79,14 @@ export function createWorkspace(input: OnboardingInput): string {
     walletAddress: PLACEHOLDER_WALLET_ADDRESS,
   }));
 
-  registerWorkspace(
-    workspaceId,
-    createInMemoryRepositories({
-      business,
-      actors,
-      suppliers,
-      transactions: [],
-      policies: seedPolicies,
-      obligations: [],
-    }),
-  );
+  await registerWorkspace(workspaceId, {
+    business,
+    actors,
+    suppliers,
+    transactions: [],
+    policies: seedPolicies,
+    obligations: [],
+  });
 
   return workspaceId;
 }

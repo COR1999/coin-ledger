@@ -25,7 +25,7 @@ export async function getCurrentWorkspaceId(): Promise<string> {
   const store = await cookies();
   const id = store.get(WORKSPACE_COOKIE)?.value;
   if (!id || id === DEMO_WORKSPACE_ID) return DEMO_WORKSPACE_ID;
-  return workspaceExists(id) ? id : DEMO_WORKSPACE_ID;
+  return (await workspaceExists(id)) ? id : DEMO_WORKSPACE_ID;
 }
 
 /** Persist the selected workspace (set once, by onboarding, after creation). */

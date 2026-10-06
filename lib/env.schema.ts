@@ -25,6 +25,10 @@ const baseEnvSchema = z.object({
   // Caps chat requests per IP per hour — protects the shared Gemini free-tier
   // quota from a single visitor exhausting it on a public demo deployment.
   CHAT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(10),
+  // Caps waitlist signups per IP per hour — the only thing stopping a script
+  // from flooding the one traction metric this build actually has (see
+  // docs/pitch.md / BUILD_LOG.md on the Tameion rubric's traction weighting).
+  WAITLIST_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(5),
   // Gates /admin/waitlist. "Production auth" is explicitly out of scope for
   // this build (see root CLAUDE.md), but that can't mean real collected PII
   // (names, emails) sits behind no real check — the owner-role check it
@@ -33,6 +37,16 @@ const baseEnvSchema = z.object({
   // in local dev is fine (the page still works via the old role check
   // there); required to actually view the page once deployed publicly.
   WAITLIST_ADMIN_SECRET: z.string().min(1).optional(),
+  // Optional shared storage (Upstash Redis REST API — also what Vercel's own
+  // KV integration provisions under the hood). Without these, workspaces and
+  // waitlist signups live only in process memory (lib/repositories/workspace-
+  // store.ts, lib/repositories/waitlist.ts), which does not survive a cold
+  // start or a second serverless instance on Vercel — a confirmed live bug
+  // (BUILD_LOG.md, 2026-10-03: a visitor's onboarded workspace reverted to
+  // the demo within 4 seconds). Both optional and unset by default so local
+  // dev and the current deployment keep working unchanged until configured.
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 });
 
 export const envSchema = baseEnvSchema.superRefine((env, ctx) => {

@@ -86,4 +86,34 @@ describe("parseEnv", () => {
     });
     expect(env.WAITLIST_ADMIN_SECRET).toBe("a-real-secret");
   });
+
+  it("defaults WAITLIST_RATE_LIMIT_PER_HOUR to 5 when unset", () => {
+    const env = parseEnv({ GOOGLE_API_KEY: "test-key" });
+    expect(env.WAITLIST_RATE_LIMIT_PER_HOUR).toBe(5);
+  });
+
+  it("rejects a non-positive WAITLIST_RATE_LIMIT_PER_HOUR", () => {
+    expect(() =>
+      parseEnv({
+        GOOGLE_API_KEY: "test-key",
+        WAITLIST_RATE_LIMIT_PER_HOUR: "0",
+      }),
+    ).toThrow(/WAITLIST_RATE_LIMIT_PER_HOUR/);
+  });
+
+  it("UPSTASH_REDIS_REST_URL/TOKEN are optional and unset by default", () => {
+    const env = parseEnv({ GOOGLE_API_KEY: "test-key" });
+    expect(env.UPSTASH_REDIS_REST_URL).toBeUndefined();
+    expect(env.UPSTASH_REDIS_REST_TOKEN).toBeUndefined();
+  });
+
+  it("rejects a non-URL UPSTASH_REDIS_REST_URL", () => {
+    expect(() =>
+      parseEnv({
+        GOOGLE_API_KEY: "test-key",
+        UPSTASH_REDIS_REST_URL: "not-a-url",
+        UPSTASH_REDIS_REST_TOKEN: "token",
+      }),
+    ).toThrow(/UPSTASH_REDIS_REST_URL/);
+  });
 });

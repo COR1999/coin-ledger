@@ -44,7 +44,7 @@ describe("onboardingInputSchema", () => {
 
 describe("createWorkspace", () => {
   it("builds a workspace from the visitor's own data, with a walletAddress on every supplier", async () => {
-    const workspaceId = createWorkspace(VALID_INPUT);
+    const workspaceId = await createWorkspace(VALID_INPUT);
     const repos = getRepositories(workspaceId);
 
     const [business, actors, suppliers, transactions, obligations] =
@@ -70,11 +70,11 @@ describe("createWorkspace", () => {
   });
 
   it("isolates two workspaces from each other", async () => {
-    const idA = createWorkspace({
+    const idA = await createWorkspace({
       ...VALID_INPUT,
       businessName: "Workspace A",
     });
-    const idB = createWorkspace({
+    const idB = await createWorkspace({
       ...VALID_INPUT,
       businessName: "Workspace B",
     });

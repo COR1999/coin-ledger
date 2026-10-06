@@ -141,9 +141,31 @@ class InMemoryPolicyRepository implements PolicyRepository {
   }
 }
 
+/** Extracts the numeric suffix from a generated id like "proposal-7" -> 7. */
+function proposalSequenceNumber(id: string): number {
+  const match = /-(\d+)$/.exec(id);
+  return match ? Number(match[1]) : 0;
+}
+
 class InMemoryPaymentProposalRepository implements PaymentProposalRepository {
   private proposals = new Map<string, PaymentProposal>();
-  private counter = 0;
+  private counter: number;
+
+  /**
+   * Optionally seeded with existing proposals (e.g. rehydrated from a
+   * persisted snapshot — see lib/repositories/kv-snapshot.ts) so ids keep
+   * their original value and the next `create()` continues the sequence
+   * instead of colliding with "proposal-1" again.
+   */
+  constructor(initialProposals: PaymentProposal[] = []) {
+    for (const p of initialProposals) {
+      this.proposals.set(p.id, p);
+    }
+    this.counter = initialProposals.reduce(
+      (max, p) => Math.max(max, proposalSequenceNumber(p.id)),
+      0,
+    );
+  }
 
   async create(input: CreateProposalInput): Promise<PaymentProposal> {
     this.counter += 1;
@@ -199,13 +221,20 @@ export interface RepositorySeedData {
   transactions: Transaction[];
   policies: Policies;
   obligations: Obligation[];
+  /** Existing proposals to rehydrate (see InMemoryPaymentProposalRepository's
+   * constructor comment). Defaults to none — every existing caller/test that
+   * doesn't pass this gets the same empty-proposals behavior as before. */
+  proposals?: PaymentProposal[];
 }
 
 /**
  * Builds a fresh set of in-memory repositories. With no argument, seeds
  * Mario's Coffee's demo data (unchanged default, used by every existing
  * caller and test). Onboarding (Phase 8) passes a visitor's own data instead
- * — same classes, same interfaces, just different starting state.
+ * — same classes, same interfaces, just different starting state. The
+ * Redis-backed store (lib/repositories/kv-snapshot.ts) also uses this as its
+ * rehydration step: load a persisted snapshot, build in-memory repositories
+ * from it, mutate, re-snapshot.
  */
 export function createInMemoryRepositories(
   data: RepositorySeedData = {
@@ -223,7 +252,7 @@ export function createInMemoryRepositories(
     suppliers: new InMemorySupplierRepository(data.suppliers),
     transactions: new InMemoryTransactionRepository(data.transactions),
     policies: new InMemoryPolicyRepository(data.policies),
-    proposals: new InMemoryPaymentProposalRepository(),
+    proposals: new InMemoryPaymentProposalRepository(data.proposals),
     obligations: new InMemoryObligationRepository(data.obligations),
   };
 }

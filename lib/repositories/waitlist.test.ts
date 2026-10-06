@@ -33,9 +33,9 @@ describe("waitlistSignupInputSchema", () => {
 });
 
 describe("addWaitlistSignup / listWaitlistSignups", () => {
-  it("records a signup with a generated id and timestamp", () => {
-    const before = listWaitlistSignups().length;
-    const signup = addWaitlistSignup({
+  it("records a signup with a generated id and timestamp", async () => {
+    const before = (await listWaitlistSignups()).length;
+    const signup = await addWaitlistSignup({
       name: "Sam",
       email: "sam@example.com",
       businessType: "Bakery",
@@ -43,7 +43,8 @@ describe("addWaitlistSignup / listWaitlistSignups", () => {
 
     expect(signup.id).toBeTruthy();
     expect(signup.createdAt).toBeTruthy();
-    expect(listWaitlistSignups()).toHaveLength(before + 1);
-    expect(listWaitlistSignups().at(-1)?.email).toBe("sam@example.com");
+    const after = await listWaitlistSignups();
+    expect(after).toHaveLength(before + 1);
+    expect(after.at(-1)?.email).toBe("sam@example.com");
   });
 });

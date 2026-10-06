@@ -59,7 +59,7 @@ export async function createWorkspaceAction(
     };
   }
 
-  const workspaceId = createWorkspace(parsed.data);
+  const workspaceId = await createWorkspace(parsed.data);
   await setCurrentWorkspaceId(workspaceId);
   redirect("/app");
 }
