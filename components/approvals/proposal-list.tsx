@@ -127,162 +127,190 @@ export function ProposalList({
 
   return (
     <div className="space-y-3">
-      {proposals.map((p) => (
-        <div
-          key={p.id}
-          className="rounded-sm border border-t-2 border-t-accent bg-background p-4"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{p.supplierName}</span>
-                <span className="font-mono text-lg font-semibold">
-                  {p.amount}
-                </span>
+      {proposals.map((p) => {
+        // `router.refresh()` asks Next to re-fetch this page's server data,
+        // but that round trip isn't instant — confirmed live (2026-10-06)
+        // that a successful confirm/approve/retry can genuinely execute a
+        // payment (real tx hash) while this component still renders the
+        // *previous* server-provided `p.status` ("awaiting confirmation",
+        // stale action buttons still clickable) for several seconds, until
+        // a hard reload catches up. Rather than trust that round trip to
+        // always land in time, treat a successful action's own result as
+        // authoritative the moment it comes back: once settled, show
+        // "Executed" immediately if a tx hash came back, and hide this
+        // proposal's action buttons either way rather than leave a
+        // just-confirmed payment showing a clickable "Confirm payment"
+        // again — the real staleness bug just found by testing this live.
+        const settled = actionState[p.id]?.status === "done";
+        const executedJustNow = settled && !!actionState[p.id]?.txHash;
+        const displayStatus = executedJustNow ? "executed" : p.status;
+
+        return (
+          <div
+            key={p.id}
+            className="rounded-sm border border-t-2 border-t-accent bg-background p-4"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{p.supplierName}</span>
+                  <span className="font-mono text-lg font-semibold">
+                    {p.amount}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {p.reason} — proposed by {p.proposedBy}
+                </p>
+                {p.requiredApproverRole && p.status === "pending" && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Requires {p.requiredApproverRole} approval
+                  </p>
+                )}
+                {p.approvedBy && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Approved by {p.approvedBy}
+                  </p>
+                )}
               </div>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {p.reason} — proposed by {p.proposedBy}
-              </p>
-              {p.requiredApproverRole && p.status === "pending" && (
-                <p className="mt-1 text-xs text-amber-600">
-                  Requires {p.requiredApproverRole} approval
-                </p>
-              )}
-              {p.approvedBy && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Approved by {p.approvedBy}
-                </p>
-              )}
+              <span
+                className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${statusColor(displayStatus)}`}
+              >
+                {settled && !executedJustNow
+                  ? "Updating…"
+                  : statusLabel(displayStatus)}
+              </span>
             </div>
-            <span
-              className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${statusColor(p.status)}`}
-            >
-              {statusLabel(p.status)}
-            </span>
-          </div>
 
-          {actionState[p.id]?.status === "error" && (
-            <p className="mt-2 text-xs text-red-600">
-              {actionState[p.id].errorMessage}
-            </p>
-          )}
-
-          {p.status === "failed" &&
-            actionState[p.id]?.status !== "error" &&
-            p.failureReason && (
+            {actionState[p.id]?.status === "error" && (
               <p className="mt-2 text-xs text-red-600">
-                Execution failed: {p.failureReason}
+                {actionState[p.id].errorMessage}
               </p>
             )}
 
-          {(p.status === "approved" || p.status === "confirmed") &&
-            !p.txHash &&
-            actionState[p.id]?.status !== "error" && (
-              <p className="mt-2 text-xs text-amber-600">
-                This payment was approved but never executed — the request that
-                should have submitted it was interrupted. Retry to submit it
-                now.
-              </p>
+            {p.status === "failed" &&
+              actionState[p.id]?.status !== "error" &&
+              p.failureReason && (
+                <p className="mt-2 text-xs text-red-600">
+                  Execution failed: {p.failureReason}
+                </p>
+              )}
+
+            {(p.status === "approved" || p.status === "confirmed") &&
+              !p.txHash &&
+              actionState[p.id]?.status !== "error" && (
+                <p className="mt-2 text-xs text-amber-600">
+                  This payment was approved but never executed — the request
+                  that should have submitted it was interrupted. Retry to submit
+                  it now.
+                </p>
+              )}
+
+            {p.status === "executing" &&
+              !p.txHash &&
+              actionState[p.id]?.status !== "error" && (
+                <p className="mt-2 text-xs text-amber-600">
+                  This payment was submitted but its outcome wasn&apos;t
+                  confirmed in time. Retry to check the result — this resumes
+                  checking the same payment rather than sending a second one.
+                </p>
+              )}
+
+            {(actionState[p.id]?.txHash ?? p.txHash) && (
+              <div className="mt-2 rounded-sm border border-emerald-600/30 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <p className="font-mono">
+                  Executed on-chain:{" "}
+                  {actionState[p.id]?.onChainAmount ?? p.onChainAmount} (
+                  {DEMO_SCALE_LABEL})
+                </p>
+                <p className="mt-0.5 font-mono">
+                  Tx:{" "}
+                  <a
+                    href={arcExplorerTxUrl(
+                      (actionState[p.id]?.txHash ?? p.txHash) as string,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    {actionState[p.id]?.txHash ?? p.txHash}
+                  </a>
+                </p>
+              </div>
             )}
 
-          {p.status === "executing" &&
-            !p.txHash &&
-            actionState[p.id]?.status !== "error" && (
-              <p className="mt-2 text-xs text-amber-600">
-                This payment was submitted but its outcome wasn&apos;t confirmed
-                in time. Retry to check the result — this resumes checking the
-                same payment rather than sending a second one.
-              </p>
-            )}
-
-          {(actionState[p.id]?.txHash ?? p.txHash) && (
-            <div className="mt-2 rounded-sm border border-emerald-600/30 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-              <p className="font-mono">
-                Executed on-chain:{" "}
-                {actionState[p.id]?.onChainAmount ?? p.onChainAmount} (
-                {DEMO_SCALE_LABEL})
-              </p>
-              <p className="mt-0.5 font-mono">
-                Tx:{" "}
-                <a
-                  href={arcExplorerTxUrl(
-                    (actionState[p.id]?.txHash ?? p.txHash) as string,
+            {/* Once an action for this proposal has settled, its buttons
+                are hidden rather than left showing the pre-action set
+                (e.g. a just-confirmed payment re-showing "Confirm payment")
+                until `router.refresh()`'s server round trip lands — see the
+                comment on `settled` above. */}
+            {!settled && (
+              <div className="mt-3 flex gap-2">
+                {p.status === "pending" &&
+                  (currentActorRole === "owner" ||
+                    currentActorRole === "accountant") && (
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAction(p.id, "approve")}
+                        disabled={actionState[p.id]?.status === "loading"}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAction(p.id, "reject")}
+                        disabled={actionState[p.id]?.status === "loading"}
+                      >
+                        Reject
+                      </Button>
+                    </>
                   )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  {actionState[p.id]?.txHash ?? p.txHash}
-                </a>
-              </p>
-            </div>
-          )}
 
-          <div className="mt-3 flex gap-2">
-            {p.status === "pending" &&
-              (currentActorRole === "owner" ||
-                currentActorRole === "accountant") && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => handleAction(p.id, "approve")}
-                    disabled={actionState[p.id]?.status === "loading"}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleAction(p.id, "reject")}
-                    disabled={actionState[p.id]?.status === "loading"}
-                  >
-                    Reject
-                  </Button>
-                </>
-              )}
+                {p.status === "awaiting_confirmation" &&
+                  (currentActorRole === "owner" ||
+                    currentActorRole === "accountant") && (
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAction(p.id, "confirm")}
+                        disabled={actionState[p.id]?.status === "loading"}
+                      >
+                        Confirm payment
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAction(p.id, "reject")}
+                        disabled={actionState[p.id]?.status === "loading"}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  )}
 
-            {p.status === "awaiting_confirmation" &&
-              (currentActorRole === "owner" ||
-                currentActorRole === "accountant") && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => handleAction(p.id, "confirm")}
-                    disabled={actionState[p.id]?.status === "loading"}
-                  >
-                    Confirm payment
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleAction(p.id, "reject")}
-                    disabled={actionState[p.id]?.status === "loading"}
-                  >
-                    Cancel
-                  </Button>
-                </>
-              )}
-
-            {(p.status === "failed" ||
-              ((p.status === "approved" ||
-                p.status === "confirmed" ||
-                p.status === "executing") &&
-                !p.txHash)) &&
-              (currentActorRole === "owner" ||
-                currentActorRole === "accountant") && (
-                <Button
-                  size="sm"
-                  onClick={() => handleAction(p.id, "retry")}
-                  disabled={actionState[p.id]?.status === "loading"}
-                >
-                  {actionState[p.id]?.status === "loading"
-                    ? "Retrying..."
-                    : "Retry payment"}
-                </Button>
-              )}
+                {(p.status === "failed" ||
+                  ((p.status === "approved" ||
+                    p.status === "confirmed" ||
+                    p.status === "executing") &&
+                    !p.txHash)) &&
+                  (currentActorRole === "owner" ||
+                    currentActorRole === "accountant") && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleAction(p.id, "retry")}
+                      disabled={actionState[p.id]?.status === "loading"}
+                    >
+                      {actionState[p.id]?.status === "loading"
+                        ? "Retrying..."
+                        : "Retry payment"}
+                    </Button>
+                  )}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
