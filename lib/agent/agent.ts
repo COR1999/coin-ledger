@@ -8,7 +8,7 @@ import {
 import type { Actor } from "@/lib/domain/types";
 import type { Repositories } from "@/lib/repositories/types";
 import { toolDefinitions, executeTool } from "./tools";
-import { formatEuros } from "@/lib/money";
+import { buildSystemPrompt } from "./system-prompt";
 
 const MAX_ITERATIONS = 10;
 /**
@@ -76,50 +76,6 @@ async function generateWithFallback(
   throw lastError;
 }
 
-function buildSystemPrompt(
-  actor: Actor,
-  policies: {
-    roles: Record<
-      string,
-      {
-        maxSinglePaymentCents: number;
-        dailyLimitCents: number | null;
-        approvalLimitCents: number | null;
-      }
-    >;
-    confirmationThresholdCents: number;
-    minimumReserveCents: number;
-    businessDailyLimitCents: number;
-  },
-): string {
-  const roleLimits = policies.roles[actor.role];
-  return `You are the financial operator for Mario's Coffee, a small café. You help staff manage payments safely.
-
-You are speaking with ${actor.name} (${actor.role}).
-
-Their limits:
-- Max single payment: ${formatEuros(roleLimits.maxSinglePaymentCents)}
-- Daily limit: ${roleLimits.dailyLimitCents ? formatEuros(roleLimits.dailyLimitCents) : "none"}
-- Approval limit: ${roleLimits.approvalLimitCents ? formatEuros(roleLimits.approvalLimitCents) : "cannot approve"}
-
-Business rules:
-- Payments above ${formatEuros(policies.confirmationThresholdCents)} require explicit confirmation
-- Minimum reserve: ${formatEuros(policies.minimumReserveCents)}
-- Business daily limit: ${formatEuros(policies.businessDailyLimitCents)}
-
-Known suppliers: ABC Coffee (abc-coffee), Local Veg Supplier (local-veg), Unknown Vendor Ltd (unknown-vendor).
-
-RULES:
-- Use tools to look up real data. Never invent numbers.
-- When asked about a payment, always use checkPolicy first to explain what would happen.
-- When the user wants to make a payment, use proposePayment to create a proposal.
-- Explain policy decisions using the reasons from the policy engine.
-- Be concise and professional. This is a finance tool, not a chatbot.
-- If a payment is rejected, explain exactly which rule(s) it violates.
-- If a payment needs approval, explain who needs to approve it and why.
-- Never claim a payment was made — you can only create proposals.`;
-}
-
 export interface AgentMessage {
   role: "user" | "assistant";
   content: string;
@@ -137,7 +93,11 @@ export async function runAgent(
   repos: Repositories,
 ): Promise<AgentResponse> {
   const client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
-  const policies = await repos.policies.get();
+  const [policies, business, suppliers] = await Promise.all([
+    repos.policies.get(),
+    repos.business.get(),
+    repos.suppliers.list(),
+  ]);
 
   const contents: Content[] = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -165,7 +125,12 @@ export async function runAgent(
           model,
           contents,
           config: {
-            systemInstruction: buildSystemPrompt(actor, policies),
+            systemInstruction: buildSystemPrompt(
+              actor,
+              business.name,
+              suppliers,
+              policies,
+            ),
             tools: [{ functionDeclarations: toolDefinitions }],
           },
         }),
