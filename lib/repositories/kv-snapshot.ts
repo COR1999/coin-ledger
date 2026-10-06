@@ -162,6 +162,9 @@ export class KvRepositories implements Repositories {
     await this.client.set(snapshotKey(this.workspaceId), snapshot);
   }
 
+  /** For mutations: load, run `op`, save whatever the in-memory repos ended
+   * up holding, under the per-workspace mutex — the full read-modify-write
+   * cycle a write needs to not lose a concurrent write within this process. */
   private withRepositories<T>(
     op: (repos: Repositories) => Promise<T>,
   ): Promise<T> {
@@ -174,8 +177,29 @@ export class KvRepositories implements Repositories {
     });
   }
 
+  /**
+   * For pure reads: load and run `op`, with no write-back and no mutex.
+   * Originally every method — read or write — went through
+   * `withRepositories`, which meant a page doing nothing but reads (e.g. the
+   * dashboard: 6+ calls, all reads) still paid for a Redis SET per call and
+   * had every one of those calls serialized against each other by the
+   * per-workspace mutex, despite none of them needing to coordinate with
+   * anything. Measured live (2026-10-06): an onboarded workspace's dashboard
+   * loaded in ~2.5s average vs. the in-memory demo's ~1.3s. Reads don't
+   * mutate the snapshot and have no lost-update risk to guard against, so
+   * they skip both the mutex and the save — only a genuine read-modify-write
+   * (a mutation) needs `withRepositories` above.
+   */
+  private async withReadOnlyRepositories<T>(
+    op: (repos: Repositories) => Promise<T>,
+  ): Promise<T> {
+    const snapshot = await this.load();
+    const repos = createInMemoryRepositories(snapshot);
+    return op(repos);
+  }
+
   business: BusinessRepository = {
-    get: () => this.withRepositories((r) => r.business.get()),
+    get: () => this.withReadOnlyRepositories((r) => r.business.get()),
     setBalanceCents: (cents) =>
       this.withRepositories((r) => r.business.setBalanceCents(cents)),
     adjustBalanceCents: (delta) =>
@@ -183,36 +207,40 @@ export class KvRepositories implements Repositories {
   };
 
   actors: ActorRepository = {
-    list: () => this.withRepositories((r) => r.actors.list()),
+    list: () => this.withReadOnlyRepositories((r) => r.actors.list()),
   };
 
   suppliers: SupplierRepository = {
-    list: () => this.withRepositories((r) => r.suppliers.list()),
-    getById: (id) => this.withRepositories((r) => r.suppliers.getById(id)),
+    list: () => this.withReadOnlyRepositories((r) => r.suppliers.list()),
+    getById: (id) =>
+      this.withReadOnlyRepositories((r) => r.suppliers.getById(id)),
   };
 
   transactions: TransactionRepository = {
-    list: () => this.withRepositories((r) => r.transactions.list()),
+    list: () => this.withReadOnlyRepositories((r) => r.transactions.list()),
     add: (transaction) =>
       this.withRepositories((r) => r.transactions.add(transaction)),
     spentOnDateCents: (date) =>
-      this.withRepositories((r) => r.transactions.spentOnDateCents(date)),
+      this.withReadOnlyRepositories((r) =>
+        r.transactions.spentOnDateCents(date),
+      ),
     spentOnDateByActorCents: (date, actorId) =>
-      this.withRepositories((r) =>
+      this.withReadOnlyRepositories((r) =>
         r.transactions.spentOnDateByActorCents(date, actorId),
       ),
   };
 
   policies: PolicyRepository = {
-    get: () => this.withRepositories((r) => r.policies.get()),
+    get: () => this.withReadOnlyRepositories((r) => r.policies.get()),
     set: (policies) => this.withRepositories((r) => r.policies.set(policies)),
   };
 
   proposals: PaymentProposalRepository = {
     create: (input: CreateProposalInput) =>
       this.withRepositories((r) => r.proposals.create(input)),
-    getById: (id) => this.withRepositories((r) => r.proposals.getById(id)),
-    list: () => this.withRepositories((r) => r.proposals.list()),
+    getById: (id) =>
+      this.withReadOnlyRepositories((r) => r.proposals.getById(id)),
+    list: () => this.withReadOnlyRepositories((r) => r.proposals.list()),
     setStatus: (id, status) =>
       this.withRepositories((r) => r.proposals.setStatus(id, status)),
     update: (id, fields: ProposalUpdate) =>
@@ -220,7 +248,7 @@ export class KvRepositories implements Repositories {
   };
 
   obligations: ObligationRepository = {
-    list: () => this.withRepositories((r) => r.obligations.list()),
+    list: () => this.withReadOnlyRepositories((r) => r.obligations.list()),
   };
 }
 

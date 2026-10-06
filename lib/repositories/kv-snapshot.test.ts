@@ -211,6 +211,70 @@ describe("KvRepositories", () => {
   });
 });
 
+describe("reads skip the write-back and the per-workspace mutex", () => {
+  it("never calls set() for pure reads", async () => {
+    let setCalls = 0;
+    const base = fakeKvClient();
+    const client: KvClient = {
+      get: base.get,
+      set: async (key, value) => {
+        setCalls += 1;
+        return base.set(key, value);
+      },
+    };
+    const repos = new KvRepositories(client, "ws-test", seedData());
+
+    await Promise.all([
+      repos.business.get(),
+      repos.suppliers.list(),
+      repos.suppliers.getById("supplier-1"),
+      repos.transactions.list(),
+      repos.transactions.spentOnDateCents("2026-10-05"),
+      repos.policies.get(),
+      repos.obligations.list(),
+      repos.proposals.list(),
+      repos.actors.list(),
+    ]);
+
+    expect(setCalls).toBe(0);
+  });
+
+  it("still calls set() exactly once per mutation", async () => {
+    let setCalls = 0;
+    const base = fakeKvClient();
+    const client: KvClient = {
+      get: base.get,
+      set: async (key, value) => {
+        setCalls += 1;
+        return base.set(key, value);
+      },
+    };
+    const repos = new KvRepositories(client, "ws-test", seedData());
+
+    await repos.business.adjustBalanceCents(eur(10));
+    expect(setCalls).toBe(1);
+
+    await repos.policies.set(await repos.policies.get());
+    expect(setCalls).toBe(2);
+  });
+
+  it("a concurrent read during an in-flight write never crashes or returns malformed data", async () => {
+    const client = fakeKvClient();
+    const repos = new KvRepositories(client, "ws-test", seedData());
+
+    const [, businessDuringWrite] = await Promise.all([
+      repos.business.adjustBalanceCents(eur(500)),
+      repos.business.get(),
+    ]);
+
+    // Either the pre- or post-write balance is an acceptable read — the
+    // point is it's one of those two real values, not corrupted/partial.
+    expect([eur(5_000), eur(5_500)]).toContain(
+      businessDuringWrite.currentBalanceCents,
+    );
+  });
+});
+
 describe("kvWorkspaceExists / registerKvWorkspace", () => {
   it("reports false until a workspace is registered, then true", async () => {
     const client = fakeKvClient();
