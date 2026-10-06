@@ -72,6 +72,7 @@ function seedData(
       businessDailyLimitCents: eur(10_000),
       minimumReserveCents: eur(500),
       confirmationThresholdCents: eur(1_000),
+      paymentsPaused: false,
     },
     obligations: [],
     ...overrides,

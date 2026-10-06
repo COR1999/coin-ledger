@@ -33,7 +33,8 @@ export class ExecutionError extends Error {
       | "ALREADY_EXECUTED"
       | "POLICY_REJECTED"
       | "PROVIDER_FAILED"
-      | "MISSING_WALLET_ADDRESS",
+      | "MISSING_WALLET_ADDRESS"
+      | "PAYMENTS_PAUSED",
   ) {
     super(message);
     this.name = "ExecutionError";
@@ -159,6 +160,20 @@ async function executePaymentExclusive(
     throw new ExecutionError(
       `Supplier ${proposal.supplierId} not found`,
       "NOT_FOUND",
+    );
+  }
+
+  // Owner's emergency circuit breaker. Checked here — the one server-side
+  // path that actually moves money — rather than only at proposal-creation
+  // time, so toggling it mid-flight stops an already-approved or already-
+  // confirmed proposal too, not just new ones. Deliberately does not change
+  // the proposal's own status (not a policy rejection of *this* proposal —
+  // it's a business-wide halt); unpausing lets a normal retry/re-confirm
+  // proceed exactly as if execution had simply been delayed.
+  if (policies.paymentsPaused) {
+    throw new ExecutionError(
+      "All payments are currently paused for this business",
+      "PAYMENTS_PAUSED",
     );
   }
 

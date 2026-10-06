@@ -10,10 +10,11 @@ import { getCurrentWorkspaceId } from "@/lib/workspace";
 export default async function ChatPage() {
   const workspaceId = await getCurrentWorkspaceId();
   const repos = getRepositories(workspaceId);
-  const [business, actors, actor] = await Promise.all([
+  const [business, actors, actor, policies] = await Promise.all([
     repos.business.get(),
     listActors(),
     getCurrentActor(),
+    repos.policies.get(),
   ]);
 
   return (
@@ -26,7 +27,7 @@ export default async function ChatPage() {
         isDemo={workspaceId === DEMO_WORKSPACE_ID}
       />
       <main className="mx-auto w-full max-w-3xl flex-1">
-        <ChatPanel actorName={actor.name} />
+        <ChatPanel actorName={actor.name} paused={policies.paymentsPaused} />
       </main>
     </div>
   );

@@ -8,7 +8,13 @@ interface Message {
   content: string;
 }
 
-export function ChatPanel({ actorName }: { actorName: string }) {
+export function ChatPanel({
+  actorName,
+  paused,
+}: {
+  actorName: string;
+  paused: boolean;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,6 +73,16 @@ export function ChatPanel({ actorName }: { actorName: string }) {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col">
+      {paused && (
+        <div
+          role="status"
+          className="shrink-0 border-b border-red-600/40 bg-red-50 px-4 py-2 text-xs text-red-800 dark:bg-red-950/20 dark:text-red-200"
+        >
+          <span className="font-semibold">Payments are paused.</span> The agent
+          can still answer questions, but won&apos;t create new payment
+          proposals until an owner resumes payments in Policies.
+        </div>
+      )}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-4"

@@ -2,6 +2,7 @@ import { CalendarClock, ShieldCheck, TrendingDown, Wallet } from "lucide-react";
 import Link from "next/link";
 
 import { AppHeader } from "@/components/app/app-header";
+import { PaymentsPausedBanner } from "@/components/app/payments-paused-banner";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { ForecastChart } from "@/components/dashboard/forecast-chart";
 import { ObligationsList } from "@/components/dashboard/obligations-list";
@@ -10,7 +11,10 @@ import { TransactionTable } from "@/components/dashboard/transaction-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SEED_TODAY } from "@/lib/data/seed";
 import { computeAlerts } from "@/lib/finance/alerts";
-import { buildDashboardData } from "@/lib/finance/dashboard";
+import {
+  actionableProposalCount,
+  buildDashboardData,
+} from "@/lib/finance/dashboard";
 import { formatEurosDisplay } from "@/lib/money";
 import {
   DEMO_WORKSPACE_ID,
@@ -61,6 +65,7 @@ export default async function DashboardPage() {
 
   const forecastBelowReserve =
     data.forecast.projectedBalanceCents < data.safeToSpend.minimumReserveCents;
+  const needsAttention = actionableProposalCount(proposals, actor.role);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-muted/30">
@@ -73,6 +78,25 @@ export default async function DashboardPage() {
       />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+        {policies.paymentsPaused && <PaymentsPausedBanner />}
+        {needsAttention > 0 && (
+          <Link
+            href="/approvals"
+            className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm hover:bg-accent/15"
+          >
+            <span>
+              <span className="font-semibold">
+                {needsAttention}{" "}
+                {needsAttention === 1 ? "proposal needs" : "proposals need"}{" "}
+                your attention
+              </span>{" "}
+              — awaiting approval or confirmation.
+            </span>
+            <span className="shrink-0 font-medium underline-offset-2">
+              Review →
+            </span>
+          </Link>
+        )}
         <div className="mb-6">
           <h1 className="font-serif text-xl font-semibold">Cash overview</h1>
           <p className="text-sm text-muted-foreground">

@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/seed";
 import { eur } from "@/lib/money";
 import {
+  actionableProposalCount,
   buildDashboardData,
   forecastSeries,
   recentTransactions,
@@ -133,5 +134,35 @@ describe("buildDashboardData", () => {
     expect(data.forecast.projectedBalanceCents).toBe(eur(8_690));
     expect(data.forecastSeries[0].balanceCents).toBe(eur(18_420));
     expect(data.transactions.length).toBeLessThanOrEqual(12);
+  });
+});
+
+describe("actionableProposalCount", () => {
+  const proposals = [
+    { status: "pending" as const },
+    { status: "awaiting_confirmation" as const },
+    { status: "executed" as const },
+    { status: "rejected" as const },
+    { status: "failed" as const },
+  ];
+
+  it("counts pending and awaiting_confirmation proposals for an owner", () => {
+    expect(actionableProposalCount(proposals, "owner")).toBe(2);
+  });
+
+  it("counts pending and awaiting_confirmation proposals for an accountant", () => {
+    expect(actionableProposalCount(proposals, "accountant")).toBe(2);
+  });
+
+  it("is always zero for an employee — nothing on Approvals is actionable for them", () => {
+    expect(actionableProposalCount(proposals, "employee")).toBe(0);
+  });
+
+  it("is zero when nothing is pending or awaiting confirmation", () => {
+    const settled = [
+      { status: "executed" as const },
+      { status: "rejected" as const },
+    ];
+    expect(actionableProposalCount(settled, "owner")).toBe(0);
   });
 });

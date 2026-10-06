@@ -90,6 +90,39 @@ describe("executePayment", () => {
     expect(business.currentBalanceCents).toBe(eur(18_420) - eur(30));
   });
 
+  it("blocks execution when payments are paused, without changing the proposal's status", async () => {
+    const proposal = await createApprovedProposal(repos);
+    const policies = await repos.policies.get();
+    await repos.policies.set({ ...policies, paymentsPaused: true });
+    const provider = createMockProvider();
+
+    await expect(
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ).rejects.toThrow(ExecutionError);
+
+    try {
+      await executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      });
+    } catch (error) {
+      expect((error as ExecutionError).code).toBe("PAYMENTS_PAUSED");
+    }
+
+    // Unlike a real policy rejection, a pause is a business-wide halt, not a
+    // verdict on this specific proposal — its status must stay exactly as
+    // it was so resuming payments lets it proceed normally, not stuck
+    // "rejected" forever.
+    const unchanged = await repos.proposals.getById(proposal.id);
+    expect(unchanged!.status).toBe("approved");
+
+    const business = await repos.business.get();
+    expect(business.currentBalanceCents).toBe(eur(18_420));
+  });
+
   it("rejects a proposal that does not exist", async () => {
     const provider = createMockProvider();
 

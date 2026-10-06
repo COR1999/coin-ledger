@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/app/app-header";
+import { PauseToggle } from "@/components/settings/pause-toggle";
 import { PolicyForm } from "@/components/settings/policy-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { policiesToForm } from "@/lib/policy/settings";
@@ -39,6 +40,10 @@ export default async function SettingsPage() {
             Limits and reserves the policy engine enforces on every payment.
             {canEdit ? " Editable by the owner." : " Read-only for your role."}
           </p>
+        </div>
+
+        <div className="mb-4">
+          <PauseToggle paused={policies.paymentsPaused} canEdit={canEdit} />
         </div>
 
         <Card>

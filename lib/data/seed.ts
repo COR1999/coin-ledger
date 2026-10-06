@@ -50,6 +50,7 @@ export const seedPolicies: Policies = {
   businessDailyLimitCents: eur(10_000),
   minimumReserveCents: eur(3_000),
   confirmationThresholdCents: eur(1_000),
+  paymentsPaused: false,
 };
 
 export const seedActors: Actor[] = [

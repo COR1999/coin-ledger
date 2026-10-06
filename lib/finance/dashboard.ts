@@ -8,6 +8,7 @@ import type {
   Obligation,
   PaymentProposal,
   Policies,
+  Role,
   Transaction,
 } from "@/lib/domain/types";
 import {
@@ -135,6 +136,26 @@ export function recentTransactions(
       a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
     )
     .slice(0, limit);
+}
+
+/**
+ * How many proposals a given role could act on right now — borrowed from
+ * Ramp/Brex-style "work remaining" dashboard framing (research, 2026-10-06)
+ * rather than only surfacing it on the dedicated Approvals page: a role
+ * that can approve/confirm shouldn't have to visit a second page to
+ * discover there's anything waiting. Only owner/accountant have any
+ * actionable item here — an employee can't approve, confirm, reject, or
+ * retry anything (see components/approvals/proposal-list.tsx's own role
+ * gates), so prompting them to "check approvals" would be a dead end.
+ */
+export function actionableProposalCount(
+  proposals: readonly Pick<PaymentProposal, "status">[],
+  role: Role,
+): number {
+  if (role !== "owner" && role !== "accountant") return 0;
+  return proposals.filter(
+    (p) => p.status === "pending" || p.status === "awaiting_confirmation",
+  ).length;
 }
 
 export interface DashboardData {

@@ -277,6 +277,21 @@ export async function executeTool(
         repos.policies.get(),
         buildBusinessState(repos, actor.id),
       ]);
+
+      // Same circuit breaker lib/payments/execute.ts re-checks at execution
+      // time — checked here too so the agent tells the user plainly rather
+      // than creating a proposal that would just fail the moment anyone
+      // tried to approve/confirm it.
+      if (policies.paymentsPaused) {
+        return JSON.stringify({
+          created: false,
+          decision: "rejected",
+          reasons: [
+            "All payments are currently paused for this business. No new proposals can be created until an owner resumes payments.",
+          ],
+        });
+      }
+
       const decision = evaluatePolicy({
         amountCents,
         actor,

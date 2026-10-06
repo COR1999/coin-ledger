@@ -114,6 +114,17 @@ export interface Policies {
   minimumReserveCents: number;
   /** Payments strictly above this require explicit human confirmation. */
   confirmationThresholdCents: number;
+  /**
+   * Owner-only emergency circuit breaker: when true, no payment may execute
+   * and the agent won't create new proposals, regardless of any other
+   * policy check passing. Modeled on a feature comparable Arc/Tameion
+   * hackathon AP agents document as standard (vendor allowlist, per-tx/daily
+   * limits, cash floor, pause control, duplicate-payment protection) — this
+   * app already had every one of those except pause control. Re-checked at
+   * the same server-side execution path as every other policy rule
+   * (lib/payments/execute.ts), never trusted from an earlier decision.
+   */
+  paymentsPaused: boolean;
 }
 
 /**
