@@ -224,6 +224,80 @@ describe("KvRepositories", () => {
   });
 });
 
+describe("resetPolicy (the demo workspace's auto-reseed)", () => {
+  it("leaves a fresh snapshot untouched while within maxAgeMs", async () => {
+    const client = fakeKvClient();
+    const policy = { maxAgeMs: 60_000 };
+    const repos = new KvRepositories(client, "ws-test", seedData(), policy);
+
+    await repos.business.adjustBalanceCents(eur(500));
+
+    const fresh = new KvRepositories(client, "ws-test", seedData(), policy);
+    expect((await fresh.business.get()).currentBalanceCents).toBe(
+      eur(5_000) + eur(500),
+    );
+  });
+
+  it("reseeds back to the starting snapshot once older than maxAgeMs", async () => {
+    const client = fakeKvClient();
+    const policy = { maxAgeMs: 1_000 };
+    const repos = new KvRepositories(client, "ws-test", seedData(), policy);
+
+    await repos.business.adjustBalanceCents(eur(500));
+    const stored = (await client.get("workspace:ws-test")) as {
+      resetAt: string;
+    };
+
+    // Simulate time passing past maxAgeMs by backdating the stored resetAt
+    // rather than faking the clock — this is exactly what a real snapshot
+    // left untouched for hours looks like to the next request.
+    await client.set("workspace:ws-test", {
+      ...stored,
+      resetAt: new Date(Date.now() - 2_000).toISOString(),
+    });
+
+    const reader = new KvRepositories(client, "ws-test", seedData(), policy);
+    expect((await reader.business.get()).currentBalanceCents).toBe(eur(5_000));
+  });
+
+  it("never reseeds a workspace with no resetPolicy, no matter how old its resetAt is", async () => {
+    const client = fakeKvClient();
+    const repos = new KvRepositories(client, "ws-test", seedData());
+    await repos.business.adjustBalanceCents(eur(500));
+
+    const stored = (await client.get("workspace:ws-test")) as {
+      resetAt: string;
+    };
+    await client.set("workspace:ws-test", {
+      ...stored,
+      resetAt: new Date(0).toISOString(),
+    });
+
+    const reader = new KvRepositories(client, "ws-test", seedData());
+    expect((await reader.business.get()).currentBalanceCents).toBe(
+      eur(5_000) + eur(500),
+    );
+  });
+
+  it("carries resetAt forward unchanged across an ordinary mutation, instead of losing the staleness clock on every write", async () => {
+    const client = fakeKvClient();
+    const policy = { maxAgeMs: 60_000 };
+    const repos = new KvRepositories(client, "ws-test", seedData(), policy);
+
+    await repos.business.adjustBalanceCents(eur(10));
+    const afterFirst = (await client.get("workspace:ws-test")) as {
+      resetAt: string;
+    };
+    expect(afterFirst.resetAt).toBeTruthy();
+
+    await repos.business.adjustBalanceCents(eur(20));
+    const afterSecond = (await client.get("workspace:ws-test")) as {
+      resetAt: string;
+    };
+    expect(afterSecond.resetAt).toBe(afterFirst.resetAt);
+  });
+});
+
 describe("reads skip the write-back and the per-workspace mutex", () => {
   it("never calls set() for pure reads", async () => {
     let setCalls = 0;

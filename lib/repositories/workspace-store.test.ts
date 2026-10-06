@@ -57,32 +57,25 @@ describe("registerWorkspace / workspaceExists", () => {
   });
 });
 
-describe("demo workspace always uses the in-memory backend", () => {
+describe("demo workspace uses the configured KV client too, with a reset policy", () => {
   afterEach(() => {
     // Module-level state — never leak a fake client into the next test.
     setKvClientProvider(() => null);
   });
 
-  it("ignores a configured KV client for the demo id specifically", async () => {
-    // Asserting the end data alone wouldn't be rigorous here: an earlier
-    // test in this file may have already cached a demo entry in the shared
-    // in-memory Map, so correct-looking data could mask a broken bypass.
-    // The real proof is that the KV client is never even called.
-    let kvWasCalled = false;
+  it("routes the demo id to the configured KV client, not the in-memory fallback", async () => {
+    let sawGet = false;
     const kv: KvClient = {
       get: async () => {
-        kvWasCalled = true;
+        sawGet = true;
         return null;
       },
-      set: async () => {
-        kvWasCalled = true;
-        return "OK";
-      },
+      set: async () => "OK",
     };
     setKvClientProvider(() => kv);
 
     const business = await getRepositories(DEMO_WORKSPACE_ID).business.get();
-    expect(kvWasCalled).toBe(false);
+    expect(sawGet).toBe(true);
     expect(business.name).toBe("Mario's Coffee");
     expect(business.currentBalanceCents).toBe(eur(18_420));
   });
@@ -100,5 +93,25 @@ describe("demo workspace always uses the in-memory backend", () => {
 
     await getRepositories("ws-kv-routing-check").business.get();
     expect(sawGet).toBe(true);
+  });
+});
+
+describe("workspaceExists for the demo workspace", () => {
+  afterEach(() => {
+    setKvClientProvider(() => null);
+  });
+
+  it("reports true even when Redis has never stored the demo key", async () => {
+    const kv: KvClient = {
+      get: async () => null,
+      set: async () => "OK",
+    };
+    setKvClientProvider(() => kv);
+
+    expect(await workspaceExists(DEMO_WORKSPACE_ID)).toBe(true);
+  });
+
+  it("reports true with no KV client configured at all", async () => {
+    expect(await workspaceExists(DEMO_WORKSPACE_ID)).toBe(true);
   });
 });

@@ -58,6 +58,25 @@ export interface WorkspaceSnapshot {
   policies: Policies;
   obligations: Obligation[];
   proposals: PaymentProposal[];
+  /**
+   * ISO timestamp this snapshot was (re)seeded. Only ever read when the
+   * owning `KvRepositories` was constructed with a `resetPolicy` — today
+   * that's the demo workspace alone (see workspace-store.ts). Carried
+   * forward unchanged on every ordinary mutation; only `toSnapshot`
+   * (building a fresh seed) stamps a new value.
+   */
+  resetAt?: string;
+}
+
+/**
+ * A workspace that's gone stale is reseeded automatically rather than left
+ * to accumulate every visitor's test data forever. Deliberately opt-in per
+ * workspace, not a default: an onboarded workspace (a real visitor's own
+ * business) must never be silently wiped, so only the demo workspace is
+ * ever constructed with one — see workspace-store.ts.
+ */
+export interface ResetPolicy {
+  maxAgeMs: number;
 }
 
 /**
@@ -85,6 +104,7 @@ function toSnapshot(data: RepositorySeedData): WorkspaceSnapshot {
     policies: data.policies,
     obligations: data.obligations,
     proposals: data.proposals ?? [],
+    resetAt: new Date().toISOString(),
   };
 }
 
@@ -124,6 +144,19 @@ function snapshotKey(workspaceId: string): string {
 }
 
 /**
+ * Deliberately a different key from `snapshotKey`, not reused: `load()` can
+ * be called from inside `withRepositories`, which already holds the
+ * `runExclusive(snapshotKey(...))` lock for the whole read-modify-write —
+ * acquiring the *same* key again from within that would deadlock against
+ * itself (the pending lock can never see its own holder release). Using a
+ * separate key still gives same-process protection against two concurrent
+ * stale-detections double-reseeding, without that reentrancy risk.
+ */
+function resetLockKey(workspaceId: string): string {
+  return `${snapshotKey(workspaceId)}:reset`;
+}
+
+/**
  * Redis-backed Repositories for one workspace.
  *
  * Known, deliberate limitation: `runExclusive` (lib/concurrency.ts) only
@@ -142,20 +175,49 @@ export class KvRepositories implements Repositories {
     private readonly workspaceId: string,
     /** Builds a starting snapshot for the rare case where this workspace's
      * Redis key is missing despite `registerWorkspace` having written it —
-     * data loss on Redis's side, not an expected path. The demo workspace
-     * itself never reaches this class at all (workspace-store.ts routes it
-     * to the in-memory backend unconditionally, so it always resets per
-     * cold start rather than accumulating every visitor's test payments
-     * forever); this fallback exists only for onboarded workspaces. */
+     * data loss on Redis's side, not an expected path for an onboarded
+     * workspace. When `resetPolicy` is set (the demo workspace — see
+     * workspace-store.ts), this same function is also the *expected* path
+     * for every periodic reseed. */
     private readonly seedIfMissing: () => RepositorySeedData,
+    /** Opt-in automatic reseed once the stored snapshot is older than
+     * `maxAgeMs`. Omitted for every onboarded workspace — a real visitor's
+     * data must never be silently wiped. */
+    private readonly resetPolicy?: ResetPolicy,
   ) {}
 
-  private async load(): Promise<WorkspaceSnapshot> {
+  private async loadFresh(): Promise<WorkspaceSnapshot> {
     const raw = await this.client.get(snapshotKey(this.workspaceId));
     if (raw === null || raw === undefined) {
       return toSnapshot(this.seedIfMissing());
     }
     return raw as WorkspaceSnapshot;
+  }
+
+  private isStale(resetAt: string | undefined): boolean {
+    if (!this.resetPolicy) return false;
+    if (!resetAt) return true;
+    const age = Date.now() - Date.parse(resetAt);
+    return !Number.isFinite(age) || age > this.resetPolicy.maxAgeMs;
+  }
+
+  private async load(): Promise<WorkspaceSnapshot> {
+    const snapshot = await this.loadFresh();
+    if (!this.isStale(snapshot.resetAt)) {
+      return snapshot;
+    }
+
+    // Stale: reseed and persist immediately, under a dedicated lock, so
+    // every caller — read or write, this process or another — converges on
+    // one reset rather than each stale read silently reseeding only for
+    // itself (which would leave Redis never actually updated).
+    return runExclusive(resetLockKey(this.workspaceId), async () => {
+      const latest = await this.loadFresh();
+      if (!this.isStale(latest.resetAt)) return latest;
+      const fresh = toSnapshot(this.seedIfMissing());
+      await this.save(fresh);
+      return fresh;
+    });
   }
 
   private async save(snapshot: WorkspaceSnapshot): Promise<void> {
@@ -172,7 +234,12 @@ export class KvRepositories implements Repositories {
       const snapshot = await this.load();
       const repos = createInMemoryRepositories(snapshot);
       const result = await op(repos);
-      await this.save(await snapshotFromRepositories(repos));
+      const next = await snapshotFromRepositories(repos);
+      // resetAt is reset-policy metadata, not something the in-memory repos
+      // know about — carry forward whatever `load()` already resolved it
+      // to, rather than losing it (and so, accidentally, the staleness
+      // clock) on every single write.
+      await this.save({ ...next, resetAt: snapshot.resetAt });
       return result;
     });
   }
