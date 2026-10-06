@@ -58,7 +58,8 @@ export const toolDefinitions: FunctionDeclaration[] = [
       properties: {
         supplierId: {
           type: Type.STRING,
-          description: 'Supplier ID, e.g. "abc-coffee", "local-veg"',
+          description:
+            "The supplier's id, exactly as given in the system prompt's known-suppliers list — never guessed or invented.",
         },
       },
       required: ["supplierId"],

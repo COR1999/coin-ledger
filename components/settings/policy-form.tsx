@@ -79,8 +79,8 @@ export function PolicyForm({
           role="note"
           className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground"
         >
-          Policies are read-only for your role. Switch to the owner (Mario) to
-          make changes.
+          Policies are read-only for your role. Switch to the owner to make
+          changes.
         </p>
       ) : null}
 

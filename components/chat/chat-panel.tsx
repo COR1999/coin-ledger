@@ -84,7 +84,7 @@ export function ChatPanel({ actorName }: { actorName: string }) {
                 {[
                   "How much cash do we have?",
                   "What bills are coming up?",
-                  "Can I pay ABC Coffee €2,400?",
+                  "What suppliers do we have on file?",
                 ].map((q) => (
                   <button
                     key={q}
