@@ -137,17 +137,78 @@ All variables are validated server-side at startup by `lib/env.ts`
 and are never committed; `.env*` is gitignored. Testnet uses disposable
 wallets only.
 
-| Variable                   | Required                       | Purpose                                                                                                                                                                                                                      |
-| -------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PAYMENT_PROVIDER`         | No (`mock` default)            | `mock` settles fake payments locally with a 10% simulated failure rate; `arc` executes real transfers on Arc testnet via Circle.                                                                                             |
-| `GOOGLE_API_KEY`           | Yes                            | Gemini key for the finance agent.                                                                                                                                                                                            |
-| `CHAT_RATE_LIMIT_PER_HOUR` | No (`10` default)              | Max chat messages per visitor (by IP) per hour on a public deployment — protects the shared Gemini free-tier quota. In-memory, so it's a soft limit on serverless platforms (see `lib/rate-limit.ts`), not a hard guarantee. |
-| `CIRCLE_API_KEY`           | Only if `PAYMENT_PROVIDER=arc` | Circle developer-controlled wallets API key.                                                                                                                                                                                 |
-| `CIRCLE_ENTITY_SECRET`     | Only if `PAYMENT_PROVIDER=arc` | Circle entity secret for wallet operations.                                                                                                                                                                                  |
-| `CIRCLE_WALLET_ADDRESS`    | Only if `PAYMENT_PROVIDER=arc` | The business's Circle-managed wallet address (created via `scripts/create-arc-wallet.ts`).                                                                                                                                   |
-| `ARC_RPC_URL`              | No                             | Arc RPC endpoint from `arc-canteen rpc-url`. Contains a Canteen token — treat as a secret. Not currently used for execution (Circle's API is called directly); kept for traction tracking.                                   |
-| `ARC_PRIVATE_KEY`          | No                             | Unused — the confirmed architecture is Circle developer-controlled wallets, not a raw-key wallet. Left for reference only.                                                                                                   |
-| `WAITLIST_ADMIN_SECRET`    | No                             | Gates `/admin/waitlist`. See **Admin** below.                                                                                                                                                                                |
+| Variable                       | Required                       | Purpose                                                                                                                                                                                                                      |
+| ------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAYMENT_PROVIDER`             | No (`mock` default)            | `mock` settles fake payments locally with a 10% simulated failure rate; `arc` executes real transfers on Arc testnet via Circle.                                                                                             |
+| `GOOGLE_API_KEY`               | Yes                            | Gemini key for the finance agent.                                                                                                                                                                                            |
+| `CHAT_RATE_LIMIT_PER_HOUR`     | No (`10` default)              | Max chat messages per visitor (by IP) per hour on a public deployment — protects the shared Gemini free-tier quota. In-memory, so it's a soft limit on serverless platforms (see `lib/rate-limit.ts`), not a hard guarantee. |
+| `CIRCLE_API_KEY`               | Only if `PAYMENT_PROVIDER=arc` | Circle developer-controlled wallets API key.                                                                                                                                                                                 |
+| `CIRCLE_ENTITY_SECRET`         | Only if `PAYMENT_PROVIDER=arc` | Circle entity secret for wallet operations.                                                                                                                                                                                  |
+| `CIRCLE_WALLET_ADDRESS`        | Only if `PAYMENT_PROVIDER=arc` | The business's Circle-managed wallet address (created via `scripts/create-arc-wallet.ts`).                                                                                                                                   |
+| `ARC_RPC_URL`                  | No                             | Arc RPC endpoint from `arc-canteen rpc-url`. Contains a Canteen token — treat as a secret. Not currently used for execution (Circle's API is called directly); kept for traction tracking.                                   |
+| `ARC_PRIVATE_KEY`              | No                             | Unused — the confirmed architecture is Circle developer-controlled wallets, not a raw-key wallet. Left for reference only.                                                                                                   |
+| `WAITLIST_ADMIN_SECRET`        | No                             | Gates `/admin/waitlist`. See **Admin** below.                                                                                                                                                                                |
+| `WAITLIST_RATE_LIMIT_PER_HOUR` | No (`5` default)               | Max waitlist signups per visitor (by IP) per hour — the only real traction metric this build has, so it's worth protecting from a script the same way `/api/chat` already is.                                                |
+| `UPSTASH_REDIS_REST_URL`       | No                             | Enables persistent, cross-instance storage. See **Data persistence** below.                                                                                                                                                  |
+| `UPSTASH_REDIS_REST_TOKEN`     | No                             | Paired with the URL above. Treat as a secret.                                                                                                                                                                                |
+
+## Data persistence
+
+By default, onboarded workspaces (Phase 8) and waitlist signups live only in
+process memory (`globalThis`, see `lib/repositories/workspace-store.ts` and
+`lib/repositories/waitlist.ts`) — fine for `npm run dev`'s single long-running
+process, **not** fine on Vercel's serverless deployment model, where separate
+function instances don't share memory. Confirmed live, 2026-10-03: a visitor's
+onboarded workspace reverted to the demo business within 4 seconds of being
+created (see `BUILD_LOG.md`). The canned demo workspace (Mario's Coffee) isn't
+affected the same way — it's reseeded fresh on every cold start rather than
+losing real data — but "try with your own business" is unreliable on the live
+deployment until this is enabled.
+
+**To enable it** (reversible, ~5 minutes, free tier):
+
+1. Create a Redis database at [upstash.com](https://upstash.com) (or Vercel's
+   own Marketplace → Upstash integration, which provisions the same thing).
+2. Copy its REST URL and token.
+3. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in
+   `.env.local` (dev) or your deployment platform's env vars (Production +
+   Preview), then redeploy.
+
+With both set, `lib/repositories/kv-snapshot.ts` takes over: each
+workspace's entire state is stored as one JSON snapshot per workspace, read
+and rewritten on every repository call, rehydrated through the exact same
+`InMemory*Repository` classes used locally — one implementation of the
+business rules, not two to keep in sync. **Known, disclosed limitation**:
+this serializes operations against one workspace within a single process
+(see `runExclusive` usage in `kv-snapshot.ts`), but two requests landing on
+two different serverless instances at the same instant can still race —
+last write wins at the whole-snapshot level. This is a deliberate trade-off,
+not an oversight: it turns a confirmed _data-loss_ bug into a much rarer,
+lower-stakes _lost-update_ race, and Circle's own idempotency-key dedup
+remains the backstop against a real payment being submitted to the chain
+twice regardless of which instance handled which request. Unset (the
+default), nothing about current behavior changes.
+
+Note: once configured, `app/layout.tsx`'s per-request theme lookup becomes a
+real network call (it reads the demo business from the same repository
+layer), so pages that were previously statically prerendered may render
+dynamically instead — correct, since the data they read is no longer static,
+and not a cost that matters at this traffic scale.
+
+## Security model
+
+There is **no real authentication** in this app — "production auth" is
+explicitly out of scope for a hackathon build (see `CLAUDE.md`). The role
+switcher and workspace onboarding are cookie-backed and enforced
+server-side (every authorization check re-reads the cookie and re-checks
+against live policy — never a client-supplied flag), but nothing stops a
+visitor from clicking the switcher to become "Mario" (the owner) themselves.
+**This is intentional, not a gap to discover**: it's a demo convenience for
+trying every role, not a security boundary. The actual safety net on the
+public deployment is that `PAYMENT_PROVIDER=mock` there — role-switching can
+only ever touch fake money, never a real Circle/Arc transaction. The one
+real secret-gated boundary in this app is `/admin/waitlist` (see **Admin**
+below), because that page exposes real collected PII, not fake demo data.
 
 ## Scripts
 
@@ -165,8 +226,9 @@ wallets only.
 ## Testing
 
 ```bash
-npm run test       # 87 tests: finance/policy engines, execution path,
-                    # idempotency, repositories, env schema, branding
+npm run test       # finance/policy engines, execution path, idempotency,
+                    # repositories (in-memory + Redis-backed), env schema,
+                    # branding, rate limiting, concurrency
 npm run typecheck
 npm run lint
 ```
