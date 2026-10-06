@@ -45,6 +45,14 @@ export interface ObligationRepository {
 export interface SupplierRepository {
   list(): Promise<Supplier[]>;
   getById(id: string): Promise<Supplier | null>;
+  /** Partial update — currently only used to toggle `blocked`, deliberately
+   * narrow rather than a general supplier-editing surface (no UI exists to
+   * add/rename/remove suppliers post-onboarding; that's a bigger feature
+   * than this build needs). */
+  update(
+    id: string,
+    fields: Partial<Pick<Supplier, "blocked">>,
+  ): Promise<Supplier>;
 }
 
 export interface TransactionRepository {

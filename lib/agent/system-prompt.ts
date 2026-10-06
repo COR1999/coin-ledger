@@ -29,17 +29,21 @@ export interface SystemPromptPolicies {
 export function buildSystemPrompt(
   actor: Actor,
   businessName: string,
-  suppliers: readonly Pick<Supplier, "id" | "name">[],
+  suppliers: readonly Pick<Supplier, "id" | "name" | "blocked">[],
   policies: SystemPromptPolicies,
 ): string {
   const roleLimits = policies.roles[actor.role];
   // Every workspace (the demo business, or one built via onboarding —
   // lib/onboarding.ts) has its own suppliers with their own ids. Listed
   // plainly, not formatted as a markdown table — kept consistent with every
-  // other line in this prompt.
+  // other line in this prompt. Blocked suppliers are flagged inline so the
+  // agent can say so immediately rather than only discovering it after
+  // proposePayment's own check rejects the attempt.
   const supplierList =
     suppliers.length > 0
-      ? suppliers.map((s) => `${s.name} (${s.id})`).join(", ")
+      ? suppliers
+          .map((s) => `${s.name} (${s.id})${s.blocked ? " [BLOCKED]" : ""}`)
+          .join(", ")
       : "none on file yet";
   return `You are the financial operator for ${businessName}. You help staff manage payments safely.
 
@@ -58,6 +62,7 @@ Business rules:
 Known suppliers: ${supplierList}. Always use the exact supplier id shown here, not the name, when calling a tool — and never a supplier that isn't in this list.
 
 RULES:
+- A supplier marked [BLOCKED] cannot be paid by anyone, including the owner. Say so immediately if asked to pay one — don't call proposePayment to find out.
 - Use tools to look up real data. Never invent numbers.
 - When asked about a payment, always use checkPolicy first to explain what would happen.
 - When the user wants to make a payment, use proposePayment to create a proposal.

@@ -14,6 +14,8 @@
  * once at proposal time.
  *
  * Decision rules, evaluated so that every applicable reason is reported:
+ *   0. Payee is blocked                              -> rejected, always,
+ *      regardless of role or any other rule
  *   1. Any business-wide rule broken               -> rejected
  *   2. Amount above the owner's single-payment max  -> rejected
  *   3. Lowest-trust role paying a non-approved payee -> rejected
@@ -71,6 +73,16 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
     amountCents > policies.confirmationThresholdCents;
 
   const rejections: string[] = [];
+
+  // Rule 0 — a blocked payee is rejected outright, before anything else is
+  // even evaluated. Stronger than `restrictedToApprovedPayees` (which only
+  // constrains the lowest-trust role): no role, including the owner, can
+  // override a block — it exists specifically so an owner can't be socially
+  // engineered or make a rushed mistake paying a payee the business has
+  // explicitly marked as unsafe.
+  if (payee.blocked) {
+    rejections.push(`${payee.name} is blocked and cannot be paid`);
+  }
 
   // Rule 1 — business-wide rules.
   const safeToSpend =

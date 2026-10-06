@@ -26,6 +26,16 @@ export interface Payee {
   monthlyLimitCents: number | null;
   /** Spend to this payee so far this calendar month. */
   spentThisMonthCents: number;
+  /**
+   * Hard block: no role, including the owner, may pay this payee while
+   * true — a stronger guarantee than `approved`, which only restricts the
+   * lowest-trust role. Modeled on the allowlist/blocklist primitive Circle's
+   * own Compliance Engine documents as standard for wallet risk management;
+   * this is a local, always-on equivalent, not a call to that API — wiring
+   * real sanctions-list screening is an integration question for whoever
+   * controls that account, not something to guess into a generic package.
+   */
+  blocked: boolean;
 }
 
 /** Per-role limits. `null` means "not applicable" for that role. */

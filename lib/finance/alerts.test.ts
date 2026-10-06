@@ -20,6 +20,7 @@ const abcCoffee: Supplier = {
   employeeApproved: true,
   monthlyLimitCents: eur(8_000),
   spentThisMonthCents: eur(4_600),
+  blocked: false,
 };
 
 describe("computeAlerts", () => {

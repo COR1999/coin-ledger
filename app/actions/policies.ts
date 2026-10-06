@@ -125,3 +125,51 @@ export async function togglePaymentsPausedAction(
       : "Payments resumed. Normal policy checks apply again.",
   };
 }
+
+export interface TransparencyToggleResult {
+  status: "idle" | "success" | "error";
+  message?: string;
+  enabled?: boolean;
+}
+
+/**
+ * Owner-only opt-in for the public "proof of operations" page
+ * (app/t/[workspaceId]). Same pattern as togglePaymentsPausedAction: a
+ * one-click toggle outside the batched policy form, because publishing or
+ * un-publishing a business's payment history is a standalone decision, not
+ * a limits edit.
+ */
+export async function toggleTransparencyAction(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _prev: TransparencyToggleResult,
+): Promise<TransparencyToggleResult> {
+  const workspaceId = await getCurrentWorkspaceId();
+  const repos = getRepositories(workspaceId);
+  const [actor, policies] = await Promise.all([
+    getCurrentActor(),
+    repos.policies.get(),
+  ]);
+
+  if (actor.role !== "owner" || !policies.roles[actor.role].canEditPolicies) {
+    return {
+      status: "error",
+      message: "Only the owner may publish or unpublish this page.",
+    };
+  }
+
+  const nextEnabled = !policies.publicTransparencyEnabled;
+  await repos.policies.set({
+    ...policies,
+    publicTransparencyEnabled: nextEnabled,
+  });
+  revalidatePath("/settings");
+  revalidatePath(`/t/${workspaceId}`);
+
+  return {
+    status: "success",
+    enabled: nextEnabled,
+    message: nextEnabled
+      ? "Published. Anyone with the link can now see your executed payments."
+      : "Unpublished. The page no longer shows your payment history.",
+  };
+}

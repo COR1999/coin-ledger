@@ -77,6 +77,7 @@ export async function createWorkspace(input: OnboardingInput): Promise<string> {
     monthlyLimitCents: null,
     spentThisMonthCents: 0,
     walletAddress: PLACEHOLDER_WALLET_ADDRESS,
+    blocked: false,
   }));
 
   await registerWorkspace(workspaceId, {
@@ -84,7 +85,11 @@ export async function createWorkspace(input: OnboardingInput): Promise<string> {
     actors,
     suppliers,
     transactions: [],
-    policies: seedPolicies,
+    // Reuses the demo's limits, but never its opt-in public transparency
+    // setting — a real visitor's own data defaults private regardless of
+    // what the showcase demo has turned on. See Policies.
+    // publicTransparencyEnabled's own comment for the full reasoning.
+    policies: { ...seedPolicies, publicTransparencyEnabled: false },
     obligations: [],
   });
 

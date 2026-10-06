@@ -52,18 +52,21 @@ const payees: Record<string, Payee> = {
     approved: true,
     monthlyLimitCents: cents(8_000),
     spentThisMonthCents: cents(4_600),
+    blocked: false,
   },
   veg: {
     name: "Local Veg",
     approved: true,
     monthlyLimitCents: cents(1_500),
     spentThisMonthCents: cents(300),
+    blocked: false,
   },
   unknown: {
     name: "Unknown Vendor",
     approved: false,
     monthlyLimitCents: null,
     spentThisMonthCents: 0,
+    blocked: false,
   },
 };
 
@@ -273,6 +276,33 @@ describe("evaluatePolicy — decision scenarios", () => {
     });
     expect(result.decision).toBe("rejected");
     expect(result.reasons.join(" ")).toMatch(/business daily limit/i);
+  });
+
+  it("owner pays a blocked payee $50 → rejected, even though every other rule would allow it", () => {
+    const result = evaluatePolicy({
+      amountCents: cents(50),
+      actor: actors.owner,
+      payee: payee("coffee", { blocked: true }),
+      businessState: state(),
+      policies,
+      formatAmount,
+    });
+    expect(result.decision).toBe("rejected");
+    expect(result.reasons.join(" ")).toMatch(/blocked/i);
+  });
+
+  it("a blocked payee is reported alongside other broken rules, not instead of them", () => {
+    const result = evaluatePolicy({
+      amountCents: cents(50_000),
+      actor: actors.owner,
+      payee: payee("coffee", { blocked: true }),
+      businessState: state(),
+      policies,
+      formatAmount,
+    });
+    expect(result.decision).toBe("rejected");
+    expect(result.reasons.join(" ")).toMatch(/blocked/i);
+    expect(result.reasons.join(" ")).toMatch(/maximum single payment/i);
   });
 });
 

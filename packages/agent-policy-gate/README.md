@@ -31,6 +31,11 @@ const result = evaluatePolicy({
     approved: true,
     monthlyLimitCents: 800_00,
     spentThisMonthCents: 460_00,
+    // Hard block — rejects this payee for every role, including the owner,
+    // regardless of any other rule. `approved` only restricts the
+    // lowest-trust role; this is the stronger guarantee for a payee you
+    // never want paid at all.
+    blocked: false,
   },
   businessState: {
     balanceCents: 1_842_00,
@@ -81,6 +86,8 @@ the escalation order in `evaluatePolicy` (rule 5 in `src/engine.ts`).
 
 Evaluated so that every applicable reason is reported, not just the first:
 
+0. The payee is blocked → **rejected**, unconditionally, before any other
+   rule is even evaluated — no role can override this, not even the owner
 1. Any business-wide rule broken (safe-to-spend — balance minus upcoming
    obligations, the minimum reserve, and cash already committed to other
    in-flight proposals — business daily limit, payee's own monthly limit)

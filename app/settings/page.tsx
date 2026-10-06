@@ -1,7 +1,10 @@
 import { AppHeader } from "@/components/app/app-header";
 import { PauseToggle } from "@/components/settings/pause-toggle";
 import { PolicyForm } from "@/components/settings/policy-form";
+import { SupplierList } from "@/components/settings/supplier-list";
+import { TransparencyToggle } from "@/components/settings/transparency-toggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatEuros } from "@/lib/money";
 import { policiesToForm } from "@/lib/policy/settings";
 import {
   DEMO_WORKSPACE_ID,
@@ -13,11 +16,12 @@ import { getCurrentWorkspaceId } from "@/lib/workspace";
 export default async function SettingsPage() {
   const workspaceId = await getCurrentWorkspaceId();
   const repos = getRepositories(workspaceId);
-  const [business, policies, actors, actor] = await Promise.all([
+  const [business, policies, actors, actor, suppliers] = await Promise.all([
     repos.business.get(),
     repos.policies.get(),
     listActors(),
     getCurrentActor(),
+    repos.suppliers.list(),
   ]);
 
   const canEdit =
@@ -46,12 +50,41 @@ export default async function SettingsPage() {
           <PauseToggle paused={policies.paymentsPaused} canEdit={canEdit} />
         </div>
 
+        <div className="mb-4">
+          <TransparencyToggle
+            enabled={policies.publicTransparencyEnabled}
+            canEdit={canEdit}
+            workspaceId={workspaceId}
+          />
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle>Limits &amp; reserves</CardTitle>
           </CardHeader>
           <CardContent>
             <PolicyForm values={policiesToForm(policies)} canEdit={canEdit} />
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Suppliers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SupplierList
+              suppliers={suppliers.map((s) => ({
+                id: s.id,
+                name: s.name,
+                category: s.category,
+                monthlyLimit: s.monthlyLimitCents
+                  ? formatEuros(s.monthlyLimitCents)
+                  : "none",
+                employeeApproved: s.employeeApproved,
+                blocked: s.blocked,
+              }))}
+              canEdit={canEdit}
+            />
           </CardContent>
         </Card>
       </main>

@@ -30,7 +30,7 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt(
       ACTOR,
       "Riverside Bakery",
-      [{ id: "supplier-1", name: "City Flour Co." }],
+      [{ id: "supplier-1", name: "City Flour Co.", blocked: false }],
       POLICIES,
     );
     expect(prompt).toContain("City Flour Co. (supplier-1)");
@@ -53,12 +53,26 @@ describe("buildSystemPrompt", () => {
       ACTOR,
       "Riverside Bakery",
       [
-        { id: "supplier-1", name: "City Flour Co." },
-        { id: "supplier-2", name: "Dairy Co-op" },
+        { id: "supplier-1", name: "City Flour Co.", blocked: false },
+        { id: "supplier-2", name: "Dairy Co-op", blocked: false },
       ],
       POLICIES,
     );
     expect(prompt).toContain("City Flour Co. (supplier-1)");
     expect(prompt).toContain("Dairy Co-op (supplier-2)");
+  });
+
+  it("flags a blocked supplier inline so the agent can say so without a tool call", () => {
+    const prompt = buildSystemPrompt(
+      ACTOR,
+      "Riverside Bakery",
+      [
+        { id: "supplier-1", name: "City Flour Co.", blocked: false },
+        { id: "supplier-2", name: "Sketchy Vendor", blocked: true },
+      ],
+      POLICIES,
+    );
+    expect(prompt).toContain("Sketchy Vendor (supplier-2) [BLOCKED]");
+    expect(prompt).not.toContain("City Flour Co. (supplier-1) [BLOCKED]");
   });
 });

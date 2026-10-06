@@ -51,6 +51,10 @@ export const seedPolicies: Policies = {
   minimumReserveCents: eur(3_000),
   confirmationThresholdCents: eur(1_000),
   paymentsPaused: false,
+  // Shown on by default for the demo specifically, to showcase the public
+  // transparency page — see Policies.publicTransparencyEnabled's own
+  // comment for why onboarded workspaces default to false instead.
+  publicTransparencyEnabled: true,
 };
 
 export const seedActors: Actor[] = [
@@ -72,6 +76,7 @@ export const seedSuppliers: Supplier[] = [
     // ee01db39-ea3a-55bf-b75b-cfdcd58a58dc) so the refund script
     // (scripts/refund-to-business.ts) can sweep test funds back.
     walletAddress: "0xe6f53dfee8ac633ce62ab09675fd0d43408e8acb",
+    blocked: false,
   },
   {
     id: "local-veg",
@@ -81,6 +86,7 @@ export const seedSuppliers: Supplier[] = [
     monthlyLimitCents: eur(1_500),
     spentThisMonthCents: eur(300),
     walletAddress: "0xe6f53dfee8ac633ce62ab09675fd0d43408e8acb",
+    blocked: false,
   },
   {
     id: "unknown-vendor",
@@ -89,6 +95,7 @@ export const seedSuppliers: Supplier[] = [
     employeeApproved: false,
     monthlyLimitCents: null,
     spentThisMonthCents: eur(0),
+    blocked: false,
   },
 ];
 

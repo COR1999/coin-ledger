@@ -58,6 +58,7 @@ function toGatePayee(supplier: Supplier): Payee {
     approved: supplier.employeeApproved,
     monthlyLimitCents: supplier.monthlyLimitCents,
     spentThisMonthCents: supplier.spentThisMonthCents,
+    blocked: supplier.blocked,
   };
 }
 

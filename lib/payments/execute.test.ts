@@ -88,6 +88,10 @@ describe("executePayment", () => {
 
     const business = await repos.business.get();
     expect(business.currentBalanceCents).toBe(eur(18_420) - eur(30));
+
+    const transactions = await repos.transactions.list();
+    const recorded = transactions.find((t) => t.proposalId === proposal.id);
+    expect(recorded!.decisionHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("blocks execution when payments are paused, without changing the proposal's status", async () => {

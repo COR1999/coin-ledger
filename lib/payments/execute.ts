@@ -8,6 +8,7 @@ import {
 import { formatCents } from "@/lib/money";
 import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
 import type { Repositories } from "@/lib/repositories/types";
+import { computeDecisionHash } from "./decision-receipt";
 import { deterministicIdempotencyKey } from "./idempotency";
 import type { PaymentProvider, PaymentStatus } from "./types";
 
@@ -207,6 +208,22 @@ async function executePaymentExclusive(
     policies,
   });
 
+  // Captured the moment the re-check actually decided — this, not the
+  // eventual execution time, is what the receipt attests to: "these were
+  // the rules and this was the verdict when the money was authorized to
+  // move," regardless of how long the provider then takes to settle.
+  const decisionHash = computeDecisionHash({
+    proposalId,
+    supplierId: supplier.id,
+    amountCents: proposal.amountCents,
+    actorId: proposer.id,
+    decision: policyResult.decision,
+    minimumReserveCents: policies.minimumReserveCents,
+    businessDailyLimitCents: policies.businessDailyLimitCents,
+    confirmationThresholdCents: policies.confirmationThresholdCents,
+    decidedAt: new Date().toISOString(),
+  });
+
   if (policyResult.decision === "rejected") {
     await repos.proposals.update(proposalId, {
       status: "rejected",
@@ -336,6 +353,7 @@ async function executePaymentExclusive(
       txHash: status.txHash,
       proposalId: proposal.id,
       proposedByActorId: proposal.proposedByActorId,
+      decisionHash,
     });
   } else if (status.status === "failed") {
     await repos.proposals.update(proposalId, {

@@ -29,6 +29,14 @@ export interface Supplier {
   spentThisMonthCents: number;
   /** On-chain receiving address. Required once PAYMENT_PROVIDER=arc. */
   walletAddress?: string;
+  /**
+   * Hard block: no role, including the owner, may pay this supplier while
+   * true. Stronger than `employeeApproved`, which only restricts the
+   * lowest-trust role. Modeled on the allowlist/blocklist primitive
+   * Circle's own Compliance Engine documents for wallet risk management —
+   * this is a local, always-on equivalent, not a call to that API.
+   */
+  blocked: boolean;
 }
 
 export interface Obligation {
@@ -62,6 +70,17 @@ export interface Transaction {
   proposalId?: string;
   /** The actor who proposed the payment, if any — drives per-actor daily limits. */
   proposedByActorId?: string;
+  /**
+   * A SHA-256 commitment over the exact policy decision that authorized
+   * this payment (proposal id, amount, actor, supplier, decision, and the
+   * live policy limits — see lib/payments/decision-receipt.ts), computed
+   * the moment lib/payments/execute.ts's server-side re-check passed, right
+   * before execution. A local, tamper-evident record — not a blockchain
+   * attestation — that the decision an auditor sees today is the same one
+   * that was actually made, not edited after the fact. Optional: only set
+   * on transactions recorded after this feature shipped (2026-10-06).
+   */
+  decisionHash?: string;
 }
 
 export interface Business {
@@ -125,6 +144,20 @@ export interface Policies {
    * (lib/payments/execute.ts), never trusted from an earlier decision.
    */
   paymentsPaused: boolean;
+  /**
+   * Owner-only opt-in: publishes a read-only, no-login "proof of
+   * operations" page (app/t/[workspaceId]) listing this business's
+   * executed payments with their real on-chain tx hashes and decision
+   * commitments — the "provable, not just logged" pitch, made checkable
+   * by anyone, not just asserted. Off by default for onboarded workspaces
+   * (a real business's transaction history is sensitive by default); on
+   * for the demo, to showcase it. Deliberately excludes balance, policy
+   * limits, and anything not already settled on-chain — publishing exact
+   * spending limits or cash position would be a real competitive-
+   * intelligence leak for a real business, so this only ever surfaces
+   * facts that are already independently verifiable on the explorer.
+   */
+  publicTransparencyEnabled: boolean;
 }
 
 /**

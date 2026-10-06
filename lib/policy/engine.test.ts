@@ -202,6 +202,18 @@ describe("evaluatePolicy — decision scenarios", () => {
     expect(result.decision).toBe("rejected");
     expect(result.reasons.join(" ")).toMatch(/safe-to-spend|reserve/i);
   });
+
+  it("15. Mario pays a blocked supplier €50 → rejected, even as owner within every other limit", () => {
+    const result = evaluatePolicy({
+      amountCents: eur(50),
+      actor: actor("owner"),
+      supplier: supplier("abc-coffee", { blocked: true }),
+      businessState: state(),
+      policies,
+    });
+    expect(result.decision).toBe("rejected");
+    expect(result.reasons.join(" ")).toMatch(/blocked/i);
+  });
 });
 
 describe("evaluateApproval", () => {

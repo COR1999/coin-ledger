@@ -224,6 +224,7 @@ export async function executeTool(
         name: supplier.name,
         category: supplier.category,
         employeeApproved: supplier.employeeApproved,
+        blocked: supplier.blocked,
         monthlyLimit: supplier.monthlyLimitCents
           ? formatEuros(supplier.monthlyLimitCents)
           : "none",

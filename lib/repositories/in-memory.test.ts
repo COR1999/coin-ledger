@@ -61,6 +61,27 @@ describe("in-memory repositories", () => {
     expect(await repos.suppliers.getById("nope")).toBeNull();
   });
 
+  it("updates a supplier's blocked status and persists it", async () => {
+    const repos = createInMemoryRepositories();
+    expect((await repos.suppliers.getById("abc-coffee"))?.blocked).toBe(false);
+
+    const updated = await repos.suppliers.update("abc-coffee", {
+      blocked: true,
+    });
+    expect(updated.blocked).toBe(true);
+    expect((await repos.suppliers.getById("abc-coffee"))?.blocked).toBe(true);
+
+    // Unrelated suppliers are untouched.
+    expect((await repos.suppliers.getById("local-veg"))?.blocked).toBe(false);
+  });
+
+  it("throws when updating an unknown supplier id", async () => {
+    const repos = createInMemoryRepositories();
+    await expect(
+      repos.suppliers.update("nope", { blocked: true }),
+    ).rejects.toThrow(/unknown supplier/i);
+  });
+
   it("creates pending proposals and updates their status", async () => {
     const repos = createInMemoryRepositories();
     const proposal = await repos.proposals.create({

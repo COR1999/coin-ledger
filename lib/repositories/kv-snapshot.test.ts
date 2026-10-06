@@ -42,6 +42,7 @@ function seedData(
         monthlyLimitCents: null,
         spentThisMonthCents: 0,
         walletAddress: "0xdemo",
+        blocked: false,
       },
     ],
     transactions: [],
@@ -73,6 +74,7 @@ function seedData(
       minimumReserveCents: eur(500),
       confirmationThresholdCents: eur(1_000),
       paymentsPaused: false,
+      publicTransparencyEnabled: false,
     },
     obligations: [],
     ...overrides,
@@ -209,6 +211,16 @@ describe("KvRepositories", () => {
     const transactions = await fresh.transactions.list();
     expect(transactions).toHaveLength(1);
     expect(transactions[0].description).toBe("Flour delivery");
+  });
+
+  it("persists a supplier block/unblock so a fresh instance sees it", async () => {
+    const client = fakeKvClient();
+    const first = new KvRepositories(client, "ws-test", seedData());
+
+    await first.suppliers.update("supplier-1", { blocked: true });
+
+    const second = new KvRepositories(client, "ws-test", seedData());
+    expect((await second.suppliers.getById("supplier-1"))?.blocked).toBe(true);
   });
 });
 

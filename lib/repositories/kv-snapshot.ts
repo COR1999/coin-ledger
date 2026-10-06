@@ -214,6 +214,8 @@ export class KvRepositories implements Repositories {
     list: () => this.withReadOnlyRepositories((r) => r.suppliers.list()),
     getById: (id) =>
       this.withReadOnlyRepositories((r) => r.suppliers.getById(id)),
+    update: (id, fields) =>
+      this.withRepositories((r) => r.suppliers.update(id, fields)),
   };
 
   transactions: TransactionRepository = {
