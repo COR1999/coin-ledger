@@ -101,6 +101,43 @@ not a fork) and is dropped rather than forced.
    waitlist or — once Phase 8 ships — let them try it with their own
    business live on the call.
 
+## Real bank/money hookup — the production path
+
+The question a real owner asks right after "I like this": *"How does it
+actually touch my bank?"* Two genuinely separate problems — don't conflate
+them in the pitch, they have different partners and different difficulty:
+
+1. **Seeing their real money (read-only).** The agent needs real balance and
+   transaction data instead of seed data. This is Open Banking: Plaid (US,
+   OAuth-style bank login, never their password) or TrueLayer/Tink/Yapily
+   (EU/UK PSD2 equivalent) — a business connects their real account once,
+   you get read access to balance + transactions. Well-trodden; Mercury,
+   Ramp and every modern SMB fintech does exactly this. Not built here.
+2. **Actually paying a supplier (write, real money moving).** This is the
+   hard part, and has two real paths, not one:
+   - **Become a payment-initiation party yourself** — the same Open
+     Banking providers' "Payment Initiation" APIs, or a BaaS partner
+     (Modern Treasury, Unit, Column, or a sponsor bank's own API) to fire
+     a real ACH/SEPA transfer. Means KYB, compliance overhead, and often a
+     sponsor-bank relationship — a real licensing/partnership lift, not a
+     weekend's integration.
+   - **Keep the stablecoin bridge we already have.** The business funds a
+     Circle-managed wallet from their real bank (an on-ramp — ACH/wire,
+     Circle already supports this for real USDC, not just testnet), the
+     agent's policy-gated spending power lives against *that* wallet, and
+     the supplier either holds the stablecoin or off-ramps it to their own
+     bank. This is the realistic near-term path: it reuses the rails
+     already built instead of requiring us to become a payment-initiation
+     licensee.
+
+**The sellable mental model**: *"You're not handing an AI your bank
+credentials or wire-transfer authority. You top up a wallet, like loading a
+corporate card — the agent can only spend what's in it, only within the
+policy limits you set, and every payment is independently provable
+afterward."* That reframes "AI touching my money" from a leap of faith into
+something closer to a corporate card with a hard, auditable limit — the
+objection most owners will actually raise first.
+
 ### The honest line for judges
 
 > "It executes real transfers on Arc testnet today — sub-second, provable,
