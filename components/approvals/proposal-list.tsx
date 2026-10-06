@@ -32,6 +32,10 @@ interface ActionState {
   errorMessage?: string;
   txHash?: string;
   onChainAmount?: string;
+  /** The proposal's real resulting status, straight from the server action
+   * — see ActionResult's own comment in app/actions/approvals.ts for why
+   * this exists instead of guessing from txHash/action type. */
+  resultStatus?: string;
 }
 
 function statusLabel(status: string): string {
@@ -111,6 +115,7 @@ export function ProposalList({
             status: "done",
             txHash: result.txHash,
             onChainAmount: result.onChainAmount,
+            resultStatus: result.status,
           }
         : { status: "error", errorMessage: result.message },
     }));
@@ -135,15 +140,22 @@ export function ProposalList({
         // *previous* server-provided `p.status` ("awaiting confirmation",
         // stale action buttons still clickable) for several seconds, until
         // a hard reload catches up. Rather than trust that round trip to
-        // always land in time, treat a successful action's own result as
-        // authoritative the moment it comes back: once settled, show
-        // "Executed" immediately if a tx hash came back, and hide this
-        // proposal's action buttons either way rather than leave a
-        // just-confirmed payment showing a clickable "Confirm payment"
-        // again — the real staleness bug just found by testing this live.
+        // always land in time or guess the outcome from a tx hash, the
+        // server action now returns the proposal's real resulting status
+        // directly (ActionResult.status) — once an action succeeds, this
+        // component treats that as authoritative for *everything* status
+        // drives below (the badge, the button set to show), not just the
+        // "executed" banner. An earlier version of this fix only special-
+        // cased "has a tx hash" and left every other successful outcome
+        // (a plain reject; an approve that still needs confirmation) stuck
+        // on a vague "Updating…" with no buttons until refresh() landed —
+        // both found live, both fixed by trusting the server's own answer
+        // instead of inferring it client-side.
         const settled = actionState[p.id]?.status === "done";
-        const executedJustNow = settled && !!actionState[p.id]?.txHash;
-        const displayStatus = executedJustNow ? "executed" : p.status;
+        const effectiveStatus =
+          settled && actionState[p.id]?.resultStatus
+            ? actionState[p.id].resultStatus!
+            : p.status;
 
         return (
           <div
@@ -161,7 +173,7 @@ export function ProposalList({
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   {p.reason} — proposed by {p.proposedBy}
                 </p>
-                {p.requiredApproverRole && p.status === "pending" && (
+                {p.requiredApproverRole && effectiveStatus === "pending" && (
                   <p className="mt-1 text-xs text-amber-600">
                     Requires {p.requiredApproverRole} approval
                   </p>
@@ -173,11 +185,9 @@ export function ProposalList({
                 )}
               </div>
               <span
-                className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${statusColor(displayStatus)}`}
+                className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${statusColor(effectiveStatus)}`}
               >
-                {settled && !executedJustNow
-                  ? "Updating…"
-                  : statusLabel(displayStatus)}
+                {statusLabel(effectiveStatus)}
               </span>
             </div>
 
@@ -187,7 +197,7 @@ export function ProposalList({
               </p>
             )}
 
-            {p.status === "failed" &&
+            {effectiveStatus === "failed" &&
               actionState[p.id]?.status !== "error" &&
               p.failureReason && (
                 <p className="mt-2 text-xs text-red-600">
@@ -195,8 +205,9 @@ export function ProposalList({
                 </p>
               )}
 
-            {(p.status === "approved" || p.status === "confirmed") &&
-              !p.txHash &&
+            {(effectiveStatus === "approved" ||
+              effectiveStatus === "confirmed") &&
+              !(actionState[p.id]?.txHash ?? p.txHash) &&
               actionState[p.id]?.status !== "error" && (
                 <p className="mt-2 text-xs text-amber-600">
                   This payment was approved but never executed — the request
@@ -205,8 +216,8 @@ export function ProposalList({
                 </p>
               )}
 
-            {p.status === "executing" &&
-              !p.txHash &&
+            {effectiveStatus === "executing" &&
+              !(actionState[p.id]?.txHash ?? p.txHash) &&
               actionState[p.id]?.status !== "error" && (
                 <p className="mt-2 text-xs text-amber-600">
                   This payment was submitted but its outcome wasn&apos;t
@@ -238,76 +249,74 @@ export function ProposalList({
               </div>
             )}
 
-            {/* Once an action for this proposal has settled, its buttons
-                are hidden rather than left showing the pre-action set
-                (e.g. a just-confirmed payment re-showing "Confirm payment")
-                until `router.refresh()`'s server round trip lands — see the
-                comment on `settled` above. */}
-            {!settled && (
-              <div className="mt-3 flex gap-2">
-                {p.status === "pending" &&
-                  (currentActorRole === "owner" ||
-                    currentActorRole === "accountant") && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAction(p.id, "approve")}
-                        disabled={actionState[p.id]?.status === "loading"}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAction(p.id, "reject")}
-                        disabled={actionState[p.id]?.status === "loading"}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  )}
-
-                {p.status === "awaiting_confirmation" &&
-                  (currentActorRole === "owner" ||
-                    currentActorRole === "accountant") && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAction(p.id, "confirm")}
-                        disabled={actionState[p.id]?.status === "loading"}
-                      >
-                        Confirm payment
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAction(p.id, "reject")}
-                        disabled={actionState[p.id]?.status === "loading"}
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  )}
-
-                {(p.status === "failed" ||
-                  ((p.status === "approved" ||
-                    p.status === "confirmed" ||
-                    p.status === "executing") &&
-                    !p.txHash)) &&
-                  (currentActorRole === "owner" ||
-                    currentActorRole === "accountant") && (
+            {/* Gated on `effectiveStatus`, not the raw server `p.status` —
+                once an action succeeds, the server tells this component the
+                real resulting status (see the comment above), so the next
+                legal action's buttons appear immediately instead of waiting
+                on `router.refresh()`'s round trip. */}
+            <div className="mt-3 flex gap-2">
+              {effectiveStatus === "pending" &&
+                (currentActorRole === "owner" ||
+                  currentActorRole === "accountant") && (
+                  <>
                     <Button
                       size="sm"
-                      onClick={() => handleAction(p.id, "retry")}
+                      onClick={() => handleAction(p.id, "approve")}
                       disabled={actionState[p.id]?.status === "loading"}
                     >
-                      {actionState[p.id]?.status === "loading"
-                        ? "Retrying..."
-                        : "Retry payment"}
+                      Approve
                     </Button>
-                  )}
-              </div>
-            )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAction(p.id, "reject")}
+                      disabled={actionState[p.id]?.status === "loading"}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                )}
+
+              {effectiveStatus === "awaiting_confirmation" &&
+                (currentActorRole === "owner" ||
+                  currentActorRole === "accountant") && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAction(p.id, "confirm")}
+                      disabled={actionState[p.id]?.status === "loading"}
+                    >
+                      Confirm payment
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAction(p.id, "reject")}
+                      disabled={actionState[p.id]?.status === "loading"}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                )}
+
+              {(effectiveStatus === "failed" ||
+                ((effectiveStatus === "approved" ||
+                  effectiveStatus === "confirmed" ||
+                  effectiveStatus === "executing") &&
+                  !(actionState[p.id]?.txHash ?? p.txHash))) &&
+                (currentActorRole === "owner" ||
+                  currentActorRole === "accountant") && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleAction(p.id, "retry")}
+                    disabled={actionState[p.id]?.status === "loading"}
+                  >
+                    {actionState[p.id]?.status === "loading"
+                      ? "Retrying..."
+                      : "Retry payment"}
+                  </Button>
+                )}
+            </div>
           </div>
         );
       })}

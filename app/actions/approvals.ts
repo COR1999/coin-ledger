@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { DEMO_SCALE_LABEL } from "@/lib/config";
+import type { ProposalStatus } from "@/lib/domain/types";
 import { evaluateApproval } from "@/lib/policy/engine";
 import { executePayment } from "@/lib/payments/execute";
 import { getPaymentProvider } from "@/lib/payments/provider";
@@ -17,6 +18,17 @@ export interface ActionResult {
   proposalId?: string;
   txHash?: string;
   onChainAmount?: string;
+  /**
+   * The proposal's actual resulting status on success — lets the client
+   * show the real next state immediately instead of guessing from txHash
+   * alone or waiting on `router.refresh()`'s round trip, which was found
+   * live (2026-10-06) to leave the UI stuck on a vague "Updating…" with no
+   * action buttons for several seconds after an approve that still needed
+   * confirmation. Omitted on failure — the UI falls back to the
+   * server-provided `p.status` there, which is still correct since nothing
+   * changed.
+   */
+  status?: ProposalStatus;
 }
 
 export async function approveProposal(
@@ -74,6 +86,7 @@ export async function approveProposal(
             proposalId,
             txHash: result.txHash,
             onChainAmount: result.onChainAmount,
+            status: "executed",
           };
         } else if (result.status === "failed") {
           return {
@@ -86,6 +99,7 @@ export async function approveProposal(
           success: true,
           message: "Payment approved and submitted (pending confirmation).",
           proposalId,
+          status: "executing",
         };
       } catch (error) {
         return {
@@ -100,6 +114,7 @@ export async function approveProposal(
       success: true,
       message: `Approved. This payment requires confirmation before execution.`,
       proposalId,
+      status: "awaiting_confirmation",
     };
   } catch (error) {
     return {
@@ -167,6 +182,7 @@ export async function confirmProposal(
           proposalId,
           txHash: result.txHash,
           onChainAmount: result.onChainAmount,
+          status: "executed",
         };
       } else if (result.status === "failed") {
         return {
@@ -179,6 +195,7 @@ export async function confirmProposal(
         success: true,
         message: "Payment confirmed and submitted (pending on-chain).",
         proposalId,
+        status: "executing",
       };
     } catch (error) {
       return {
@@ -254,6 +271,7 @@ export async function retryPayment(proposalId: string): Promise<ActionResult> {
           proposalId,
           txHash: result.txHash,
           onChainAmount: result.onChainAmount,
+          status: "executed",
         };
       } else if (result.status === "failed") {
         return {
@@ -266,6 +284,7 @@ export async function retryPayment(proposalId: string): Promise<ActionResult> {
         success: true,
         message: "Retry submitted (pending on-chain confirmation).",
         proposalId,
+        status: "executing",
       };
     } catch (error) {
       return {
@@ -307,6 +326,7 @@ export async function rejectProposal(
       success: true,
       message: "Proposal rejected.",
       proposalId,
+      status: "rejected",
     };
   } catch (error) {
     return {
