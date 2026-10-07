@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/app/app-header";
 import { TransactionTable } from "@/components/dashboard/transaction-table";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEMO_SCALE_LABEL } from "@/lib/config";
 import { recentTransactions } from "@/lib/finance/dashboard";
@@ -33,15 +34,23 @@ export default async function TransactionsPage() {
       />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
-        <div className="mb-6">
-          <h1 className="font-serif text-xl font-semibold">
-            Transaction history
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Every recorded transaction for {business.name}. Payments settled on
-            Arc testnet show their on-chain amount, linked to the explorer —{" "}
-            {DEMO_SCALE_LABEL}.
-          </p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-serif text-xl font-semibold">
+              Transaction history
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Every recorded transaction for {business.name}. Payments settled
+              on Arc testnet show their on-chain amount, linked to the explorer
+              — {DEMO_SCALE_LABEL}.
+            </p>
+          </div>
+          <a
+            href="/api/transactions/export"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Export CSV
+          </a>
         </div>
 
         <Card>
