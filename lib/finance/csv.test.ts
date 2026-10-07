@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Transaction } from "@/lib/domain/types";
 import { transactionsToCsv } from "./csv";
 
+const COLUMN_COUNT = 7;
+
 function tx(overrides: Partial<Transaction> = {}): Transaction {
   return {
     id: "tx-1",
@@ -68,5 +70,12 @@ describe("transactionsToCsv", () => {
   it("produces just the header row for no transactions", () => {
     const csv = transactionsToCsv([]);
     expect(csv.trim().split("\r\n")).toHaveLength(1);
+  });
+
+  it("never uses a thousands-separator comma in the amount column, which would silently break the column count", () => {
+    const csv = transactionsToCsv([tx({ amountCents: -320_000 })]);
+    const lines = csv.trim().split("\r\n");
+    expect(lines[1].split(",")).toHaveLength(COLUMN_COUNT);
+    expect(lines[1]).toContain("-3200.00");
   });
 });
