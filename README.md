@@ -92,6 +92,11 @@ const result = evaluatePolicy({
     approved: true,
     monthlyLimitCents: 80000,
     spentThisMonthCents: 46000,
+    // Hard block — rejects this payee for every role, including the owner,
+    // regardless of any other rule. `approved` only restricts the
+    // lowest-trust role; this is the stronger guarantee for a payee you
+    // never want paid at all.
+    blocked: false,
   },
   businessState: {
     balanceCents,
@@ -151,6 +156,7 @@ wallets only.
 | `WAITLIST_RATE_LIMIT_PER_HOUR` | No (`5` default)               | Max waitlist signups per visitor (by IP) per hour — the only real traction metric this build has, so it's worth protecting from a script the same way `/api/chat` already is.                                                |
 | `UPSTASH_REDIS_REST_URL`       | No                             | Enables persistent, cross-instance storage. See **Data persistence** below.                                                                                                                                                  |
 | `UPSTASH_REDIS_REST_TOKEN`     | No                             | Paired with the URL above. Treat as a secret.                                                                                                                                                                                |
+| `APP_BASE_URL`                 | No                             | Absolute origin for the `/approvals` link inside an approval-notification webhook (see **Trust & transparency features**). Only needed for a custom domain — Vercel's own deployment URL is used automatically otherwise.    |
 
 ## Data persistence
 
@@ -160,10 +166,20 @@ process memory (`globalThis`, see `lib/repositories/workspace-store.ts` and
 process, **not** fine on Vercel's serverless deployment model, where separate
 function instances don't share memory. Confirmed live, 2026-10-03: a visitor's
 onboarded workspace reverted to the demo business within 4 seconds of being
-created (see `BUILD_LOG.md`). The canned demo workspace (Mario's Coffee) isn't
-affected the same way — it's reseeded fresh on every cold start rather than
-losing real data — but "try with your own business" is unreliable on the live
-deployment until this is enabled.
+created (see `BUILD_LOG.md`) — "try with your own business" is unreliable on
+the live deployment until this is enabled.
+
+The canned demo workspace (Mario's Coffee) is **always** Redis-backed once
+Redis is configured, even though it's not a real visitor's own data — an
+earlier version kept it in-memory-only so it would reset on every cold start,
+but live-verifying the public transparency page (2026-10-06) showed that
+"resets on cold start" doesn't actually hold: a payment executed via `/chat`
+was already gone a few requests later in the same session, because separate
+requests can land on different serverless instances even without a cold
+start in between. The demo now gets the same durable Redis path as any
+onboarded workspace, plus a 6-hour time-based auto-reseed
+(`DEMO_RESET_AFTER_MS` in `workspace-store.ts`) so it still doesn't
+accumulate every visitor's test data forever.
 
 **To enable it** (reversible, ~5 minutes, free tier):
 
@@ -209,6 +225,36 @@ public deployment is that `PAYMENT_PROVIDER=mock` there — role-switching can
 only ever touch fake money, never a real Circle/Arc transaction. The one
 real secret-gated boundary in this app is `/admin/waitlist` (see **Admin**
 below), because that page exposes real collected PII, not fake demo data.
+
+## Trust & transparency features
+
+Four owner-facing features, all in `/settings`, built on top of the core
+propose → decide → approve → execute flow rather than alongside it:
+
+- **Supplier blocklist.** A hard, always-on block on a supplier — stronger
+  than the existing employee-approval restriction, since it refuses
+  _every_ role, including the owner. Enforced as the very first rule the
+  policy engine checks (`packages/agent-policy-gate`'s "Rule 0"), and the
+  agent's system prompt flags a blocked supplier inline so it refuses in
+  conversation without even attempting the tool call.
+- **Decision-hash + public "proof of operations" page.** Every executed
+  payment carries a local SHA-256 commitment (`lib/payments/decision-receipt.ts`)
+  over the exact policy decision that authorized it — not a blockchain
+  attestation, the UI says so outright, but a tamper-evident record an
+  auditor could recompute and check later. Owners can opt in to a
+  no-login page at `/t/<workspace-id>` listing executed payments with
+  their real Arc explorer links and decision hashes — deliberately never
+  balance or policy limits, which would be a competitive-intelligence leak
+  for a real business.
+- **CSV export** (`/transactions`) of the full transaction history, for an
+  accountant reconciling books in QuickBooks/Xero/a spreadsheet.
+- **Approval-notification webhooks.** A Slack/Discord incoming webhook URL
+  (or any generic JSON listener) notified the moment a proposal needs a
+  human to act — approval or confirmation — so an owner doesn't have to
+  remember to poll `/approvals`. Validated against SSRF at the settings
+  boundary (`lib/notify/webhook.ts`): any literal IP address is rejected
+  outright, not just a denylist of specific ones, since a legitimate
+  webhook provider is always referenced by hostname.
 
 ## Scripts
 
