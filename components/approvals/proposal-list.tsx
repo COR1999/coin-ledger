@@ -117,7 +117,17 @@ export function ProposalList({
             onChainAmount: result.onChainAmount,
             resultStatus: result.status,
           }
-        : { status: "error", errorMessage: result.message },
+        : // Still an error (shows the message, see below) — but if the
+          // server also reports the proposal's real resulting status (an
+          // execution that failed *after* already mutating the proposal,
+          // not a permission check that changed nothing), carry it so
+          // effectiveStatus doesn't fall back to a now-stale p.status for
+          // the same staleness-window reason the success path was fixed.
+          {
+            status: "error",
+            errorMessage: result.message,
+            resultStatus: result.status,
+          },
     }));
     router.refresh();
   }
@@ -150,12 +160,12 @@ export function ProposalList({
         // (a plain reject; an approve that still needs confirmation) stuck
         // on a vague "Updating…" with no buttons until refresh() landed —
         // both found live, both fixed by trusting the server's own answer
-        // instead of inferring it client-side.
-        const settled = actionState[p.id]?.status === "done";
-        const effectiveStatus =
-          settled && actionState[p.id]?.resultStatus
-            ? actionState[p.id].resultStatus!
-            : p.status;
+        // instead of inferring it client-side. `resultStatus` can also
+        // arrive on a `success: false` result (an execution that failed
+        // *after* already mutating the proposal to "failed" server-side) —
+        // keyed on its presence, not on `status === "done"`, so that case
+        // gets the same fix rather than falling back to a stale p.status.
+        const effectiveStatus = actionState[p.id]?.resultStatus ?? p.status;
 
         return (
           <div

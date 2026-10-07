@@ -3,6 +3,9 @@
 import { z } from "zod";
 import { DEMO_SCALE_LABEL } from "@/lib/config";
 import type { ProposalStatus } from "@/lib/domain/types";
+import { env } from "@/lib/env";
+import { formatEuros } from "@/lib/money";
+import { sendApprovalNotification } from "@/lib/notify/webhook";
 import { evaluateApproval } from "@/lib/policy/engine";
 import { executePayment } from "@/lib/payments/execute";
 import { getPaymentProvider } from "@/lib/payments/provider";
@@ -12,6 +15,16 @@ import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 const proposalIdSchema = z.string().min(1);
 
+/** Same resolution as app/api/chat/route.ts's own copy — see that file's
+ * comment. Small enough, and used from few enough places, that a shared
+ * helper isn't worth the extra indirection; duplicated deliberately rather
+ * than importing one route's helper into another. */
+function resolveAppBaseUrl(): string | undefined {
+  if (env.APP_BASE_URL) return env.APP_BASE_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return undefined;
+}
+
 export interface ActionResult {
   success: boolean;
   message: string;
@@ -19,14 +32,18 @@ export interface ActionResult {
   txHash?: string;
   onChainAmount?: string;
   /**
-   * The proposal's actual resulting status on success — lets the client
-   * show the real next state immediately instead of guessing from txHash
-   * alone or waiting on `router.refresh()`'s round trip, which was found
-   * live (2026-10-06) to leave the UI stuck on a vague "Updating…" with no
-   * action buttons for several seconds after an approve that still needed
-   * confirmation. Omitted on failure — the UI falls back to the
-   * server-provided `p.status` there, which is still correct since nothing
-   * changed.
+   * The proposal's actual resulting status, whenever it actually changed —
+   * lets the client show the real next state immediately instead of
+   * guessing from txHash alone or waiting on `router.refresh()`'s round
+   * trip, which was found live (2026-10-06) to leave the UI stuck on a
+   * vague "Updating…" with no action buttons for several seconds after an
+   * approve that still needed confirmation. Included on `success: false`
+   * too when the proposal's status genuinely moved server-side — a
+   * permission check failing before any mutation leaves this unset (nothing
+   * changed, `p.status` is still accurate), but an execution that fails
+   * *after* `executePayment` already persisted `status: "failed"` must
+   * report it, or the UI shows stale pre-action buttons for the same
+   * staleness-window reason the success path was fixed for.
    */
   status?: ProposalStatus;
 }
@@ -93,6 +110,7 @@ export async function approveProposal(
             success: false,
             message: `Payment approved but execution failed: ${result.failureReason}`,
             proposalId,
+            status: "failed",
           };
         }
         return {
@@ -108,6 +126,27 @@ export async function approveProposal(
           proposalId,
         };
       }
+    }
+
+    // A second, distinct human-actionable state from "pending" — the agent
+    // already notified once at proposal creation (lib/agent/tools.ts), but
+    // that was about needing *approval*; needing *confirmation* is a
+    // separate ask, often of a different role (a higher approval limit),
+    // and was previously silent — the owner-configured notification channel
+    // only ever fired once per proposal regardless of how many distinct
+    // human actions it actually needed.
+    if (policies.notificationWebhookUrl) {
+      const supplier = await repos.suppliers.getById(proposal.supplierId);
+      const appBaseUrl = resolveAppBaseUrl();
+      await sendApprovalNotification(policies.notificationWebhookUrl, {
+        supplierName: supplier?.name ?? proposal.supplierId,
+        amountDisplay: formatEuros(proposal.amountCents),
+        reason: proposal.reason,
+        actorName: actor.name,
+        verb: "approved",
+        action: "confirmation",
+        approvalsUrl: appBaseUrl ? `${appBaseUrl}/approvals` : "/approvals",
+      });
     }
 
     return {
@@ -189,6 +228,7 @@ export async function confirmProposal(
           success: false,
           message: `Payment confirmed but execution failed: ${result.failureReason}`,
           proposalId,
+          status: "failed",
         };
       }
       return {
@@ -278,6 +318,7 @@ export async function retryPayment(proposalId: string): Promise<ActionResult> {
           success: false,
           message: `Retry failed again: ${result.failureReason}`,
           proposalId,
+          status: "failed",
         };
       }
       return {

@@ -5,9 +5,14 @@
  * owner-configured URL. Slack and Discord incoming webhooks are detected by
  * host and given their native payload shape so it renders natively in
  * either; anything else gets a generic JSON body, for Zapier/Make/a custom
- * listener. Fire-and-forget from the agent's tool call — a slow or dead
- * webhook must never block or fail the chat response that triggered it.
+ * listener. The agent's tool call awaits this (capped at 5s below) rather
+ * than firing it detached — a detached promise has no guarantee of running
+ * to completion once a serverless function's response has been sent, so
+ * "fire and forget" would mean "sometimes never fires" here. What it
+ * guarantees instead: a slow or dead webhook can delay the chat response by
+ * up to 5s, but can never fail it — every error is caught and only logged.
  */
+import { isIP } from "node:net";
 import { z } from "zod";
 
 /**
@@ -22,15 +27,18 @@ import { z } from "zod";
  * genuinely untrusted URLs. Here the URL is owner-entered, not
  * attacker-supplied, which is why this lighter guard is a reasonable match
  * for what it's defending.
+ *
+ * Rejecting *any* literal IP address (v4 or v6), rather than maintaining a
+ * denylist of specific addresses, is the actual guard: a legitimate webhook
+ * provider (Slack, Discord, Zapier, a custom domain) is always referenced
+ * by hostname, never a raw IP. A denylist alone is bypassable — e.g.
+ * `https://[::1]/hook` carries IPv6 brackets that survive into
+ * `URL#hostname` as `"[::1]"`, which never matches a bare `"::1"` string
+ * entry (caught in review, 2026-10-07, confirmed via `new URL(...).hostname`
+ * directly). `node:net`'s `isIP` normalizes that for us instead of hand-
+ * rolling IPv6/IPv4-mapped-IPv6 parsing.
  */
-const BLOCKED_HOSTS = new Set([
-  "localhost",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "169.254.169.254", // AWS/GCP/Azure instance metadata
-  "metadata.google.internal",
-]);
+const BLOCKED_HOSTNAMES = new Set(["localhost", "metadata.google.internal"]);
 
 export const webhookUrlSchema = z
   .string()
@@ -46,9 +54,13 @@ export const webhookUrlSchema = z
       }
       if (parsed.protocol !== "https:") return false;
       const host = parsed.hostname.toLowerCase();
-      if (BLOCKED_HOSTS.has(host)) return false;
-      if (host.startsWith("169.254.") || host.startsWith("127.")) return false;
+      if (BLOCKED_HOSTNAMES.has(host)) return false;
       if (host.endsWith(".local") || host.endsWith(".internal")) return false;
+      // Strip IPv6 brackets ("[::1]" -> "::1") before checking — isIP
+      // only recognizes the unbracketed form.
+      const unbracketed =
+        host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+      if (isIP(unbracketed) !== 0) return false;
       return true;
     },
     { message: "Must be a valid https:// URL, not a local/internal address" },
@@ -58,7 +70,20 @@ export interface ApprovalNotificationEvent {
   supplierName: string;
   amountDisplay: string;
   reason: string;
-  proposedByName: string;
+  /** The actor whose action just produced this state. */
+  actorName: string;
+  /**
+   * What `actorName` just did. Deliberately a separate field from `action`
+   * below, not derived from it: a proposal reaches "needs confirmation" two
+   * different ways — proposed directly by someone with enough authority
+   * that no escalation was needed (lib/agent/tools.ts, `verb: "proposed"`),
+   * or approved into that state from "pending" by a separate approver
+   * (app/actions/approvals.ts, `verb: "approved"`). Collapsing this into a
+   * single field keyed off `action` said "Mario approved paying..." for a
+   * proposal Mario had in fact proposed directly — caught in the first live
+   * run of this notification, 2026-10-07.
+   */
+  verb: "proposed" | "approved";
   /** "needs your approval" vs "needs your confirmation" — the two states
    * that actually require a human, phrased for a non-technical reader. */
   action: "approval" | "confirmation";
@@ -66,10 +91,9 @@ export interface ApprovalNotificationEvent {
 }
 
 function summaryLine(event: ApprovalNotificationEvent): string {
-  const verb = event.action === "approval" ? "approval" : "confirmation";
   return (
-    `Coin Ledger: ${event.proposedByName} proposed paying ${event.supplierName} ` +
-    `${event.amountDisplay} (${event.reason}) — needs ${verb}. ${event.approvalsUrl}`
+    `Coin Ledger: ${event.actorName} ${event.verb} paying ${event.supplierName} ` +
+    `${event.amountDisplay} (${event.reason}) — needs ${event.action}. ${event.approvalsUrl}`
   );
 }
 
@@ -96,10 +120,9 @@ export function buildWebhookPayload(
 }
 
 /**
- * Fire-and-forget: errors are caught and logged server-side, never thrown,
- * so a down or misconfigured webhook can't fail the chat response that
- * triggered it. A 5s timeout for the same reason — a hanging endpoint must
- * not hold the agent's response open indefinitely.
+ * Awaited by the caller, but never allowed to fail or hang it: errors are
+ * caught and logged server-side, never thrown, and a 5s timeout caps how
+ * long a hanging endpoint can hold the agent's response open.
  */
 export async function sendApprovalNotification(
   url: string,

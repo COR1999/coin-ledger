@@ -366,7 +366,8 @@ export async function executeTool(
           supplierName: supplier.name,
           amountDisplay: formatEuros(amountCents),
           reason: input.reason,
-          proposedByName: actor.name,
+          actorName: actor.name,
+          verb: "proposed",
           action: status === "pending" ? "approval" : "confirmation",
           approvalsUrl: appBaseUrl ? `${appBaseUrl}/approvals` : "/approvals",
         });

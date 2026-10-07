@@ -18,7 +18,12 @@ export async function selectActorAction(formData: FormData): Promise<void> {
   if (typeof actorId !== "string") return;
   try {
     await setCurrentActor(actorId);
-  } catch {
+  } catch (error) {
+    // Expected for a stale/tampered actor id (setCurrentActor's own
+    // documented throw) — but logged, not silently dropped, so a genuinely
+    // unexpected failure here (e.g. a session-store outage) still leaves a
+    // trail in server logs instead of vanishing with zero diagnostic trace.
+    console.error("selectActorAction failed:", error);
     return;
   }
   revalidatePath("/", "layout");

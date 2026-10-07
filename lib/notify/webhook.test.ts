@@ -6,7 +6,8 @@ const EVENT = {
   supplierName: "ABC Coffee",
   amountDisplay: "€2,400",
   reason: "Monthly beans delivery",
-  proposedByName: "Liam",
+  actorName: "Liam",
+  verb: "proposed" as const,
   action: "approval" as const,
   approvalsUrl: "https://financial-operator.vercel.app/approvals",
 };
@@ -54,6 +55,28 @@ describe("webhookUrlSchema", () => {
   it("rejects a non-URL string", () => {
     expect(webhookUrlSchema.safeParse("not a url").success).toBe(false);
   });
+
+  it("rejects the bracketed IPv6 loopback form, not just the bare one", () => {
+    // Regression: new URL("https://[::1]/x").hostname is "[::1]" (brackets
+    // kept), which a naive `BLOCKED_HOSTS.has("::1")` string check never
+    // matches — confirmed bypassing validation before the isIP-based fix.
+    expect(webhookUrlSchema.safeParse("https://[::1]/hook").success).toBe(
+      false,
+    );
+  });
+
+  it("rejects any other literal IPv6 address, not just known-bad ones", () => {
+    expect(
+      webhookUrlSchema.safeParse("https://[2001:db8::1]/hook").success,
+    ).toBe(false);
+  });
+
+  it("rejects an IPv4-mapped IPv6 form of a blocked address", () => {
+    expect(
+      webhookUrlSchema.safeParse("https://[::ffff:169.254.169.254]/hook")
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe("buildWebhookPayload", () => {
@@ -89,5 +112,34 @@ describe("buildWebhookPayload", () => {
       action: "confirmation",
     });
     expect(payload.message).toContain("needs confirmation");
+  });
+
+  it("says 'approved' when an approver's action moved an existing proposal into needing confirmation", () => {
+    // Regression: the first live run of this notification (2026-10-07) read
+    // "Mario proposed paying..." when Mario had actually just *approved* a
+    // proposal Liam made — the verb was derived from `action` alone, which
+    // can't distinguish this from the case below.
+    const payload = buildWebhookPayload("https://hooks.example.com/x", {
+      ...EVENT,
+      actorName: "Mario",
+      verb: "approved",
+      action: "confirmation",
+    });
+    expect(payload.message).toContain("Mario approved paying");
+    expect(payload.message).not.toContain("Mario proposed");
+  });
+
+  it("still says 'proposed' when someone with enough authority proposes directly into needing confirmation, no approval step involved", () => {
+    // The other way a proposal reaches "needs confirmation": proposed
+    // directly by an owner/accountant above the confirmation threshold but
+    // within their own single-payment limit — nobody approved anything.
+    const payload = buildWebhookPayload("https://hooks.example.com/x", {
+      ...EVENT,
+      actorName: "Mario",
+      verb: "proposed",
+      action: "confirmation",
+    });
+    expect(payload.message).toContain("Mario proposed paying");
+    expect(payload.message).not.toContain("Mario approved");
   });
 });
