@@ -243,7 +243,7 @@ export function ProposalList({
                   {actionState[p.id]?.onChainAmount ?? p.onChainAmount} (
                   {DEMO_SCALE_LABEL})
                 </p>
-                <p className="mt-0.5 font-mono">
+                <p className="mt-0.5 break-all font-mono">
                   Tx:{" "}
                   <a
                     href={arcExplorerTxUrl(
