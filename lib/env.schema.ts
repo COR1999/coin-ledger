@@ -47,6 +47,12 @@ const baseEnvSchema = z.object({
   // dev and the current deployment keep working unchanged until configured.
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+  // Absolute origin used to build a clickable /approvals link inside an
+  // owner's approval-notification webhook (lib/notify/webhook.ts) — a
+  // relative path means nothing inside a Slack/Discord message. Optional:
+  // falls back to Vercel's own VERCEL_URL at the call site when unset, and
+  // the webhook feature itself is opt-in, so neither is required to boot.
+  APP_BASE_URL: z.string().url().optional(),
 });
 
 export const envSchema = baseEnvSchema.superRefine((env, ctx) => {

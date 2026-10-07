@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/app/app-header";
+import { NotificationWebhookForm } from "@/components/settings/notification-webhook-form";
 import { PauseToggle } from "@/components/settings/pause-toggle";
 import { PolicyForm } from "@/components/settings/policy-form";
 import { SupplierList } from "@/components/settings/supplier-list";
@@ -55,6 +56,13 @@ export default async function SettingsPage() {
             enabled={policies.publicTransparencyEnabled}
             canEdit={canEdit}
             workspaceId={workspaceId}
+          />
+        </div>
+
+        <div className="mb-4">
+          <NotificationWebhookForm
+            webhookUrl={policies.notificationWebhookUrl}
+            canEdit={canEdit}
           />
         </div>
 

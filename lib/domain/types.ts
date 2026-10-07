@@ -158,6 +158,16 @@ export interface Policies {
    * facts that are already independently verifiable on the explorer.
    */
   publicTransparencyEnabled: boolean;
+  /**
+   * Owner-only opt-in: a webhook URL (Slack/Discord incoming webhook, or any
+   * generic JSON listener — Zapier, Make, a custom endpoint) notified the
+   * moment a proposal lands in a state that needs a human to act (pending
+   * approval or awaiting confirmation) — not on every proposal, since an
+   * auto-approved payment inside every limit needs nobody's attention.
+   * Real owners don't want to remember to poll /approvals; a real approval
+   * workflow pings the people who have to act. See lib/notify/webhook.ts.
+   */
+  notificationWebhookUrl?: string;
 }
 
 /**

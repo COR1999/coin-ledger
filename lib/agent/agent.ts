@@ -91,6 +91,9 @@ export async function runAgent(
   messages: AgentMessage[],
   actor: Actor,
   repos: Repositories,
+  /** See lib/agent/tools.ts's executeTool — threaded through only to build
+   * a clickable /approvals link in an approval-notification webhook. */
+  appBaseUrl?: string,
 ): Promise<AgentResponse> {
   const client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
   const [policies, business, suppliers] = await Promise.all([
@@ -164,7 +167,13 @@ export async function runAgent(
     for (const call of functionCalls) {
       const name = call.name ?? "";
       try {
-        const result = await executeTool(name, call.args ?? {}, repos, actor);
+        const result = await executeTool(
+          name,
+          call.args ?? {},
+          repos,
+          actor,
+          appBaseUrl,
+        );
 
         const parsed = JSON.parse(result);
         if (parsed.proposalId) {

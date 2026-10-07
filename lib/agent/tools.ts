@@ -11,6 +11,7 @@ import { evaluatePolicy, type PolicyBusinessState } from "@/lib/policy/engine";
 import { formatEuros, parseAmountToCents } from "@/lib/money";
 import { proposedPaymentSchema } from "@/lib/domain/types";
 import type { Actor } from "@/lib/domain/types";
+import { sendApprovalNotification } from "@/lib/notify/webhook";
 import { Type, type FunctionDeclaration } from "@google/genai";
 
 const getSupplierSchema = z.object({
@@ -150,6 +151,10 @@ export async function executeTool(
   rawInput: unknown,
   repos: Repositories,
   actor: Actor,
+  /** Absolute origin for the /approvals link inside an approval-notification
+   * webhook. Undefined is fine — proposePayment just skips the link-building
+   * step, same as when no webhook is configured at all. */
+  appBaseUrl?: string,
 ): Promise<string> {
   switch (toolName) {
     case "getBalance": {
@@ -348,6 +353,23 @@ export async function executeTool(
         result.message =
           "Payment approved by policy. It will be executed automatically.";
         result.autoExecute = true;
+      }
+
+      // Only "pending" (needs_approval) and "awaiting_confirmation" actually
+      // need a human to go do something — an auto-approved payment that's
+      // about to execute itself needs nobody's attention right now.
+      if (
+        policies.notificationWebhookUrl &&
+        (status === "pending" || status === "awaiting_confirmation")
+      ) {
+        await sendApprovalNotification(policies.notificationWebhookUrl, {
+          supplierName: supplier.name,
+          amountDisplay: formatEuros(amountCents),
+          reason: input.reason,
+          proposedByName: actor.name,
+          action: status === "pending" ? "approval" : "confirmation",
+          approvalsUrl: appBaseUrl ? `${appBaseUrl}/approvals` : "/approvals",
+        });
       }
 
       return JSON.stringify(result);

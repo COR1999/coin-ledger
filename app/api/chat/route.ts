@@ -27,6 +27,17 @@ function clientIp(req: NextRequest): string {
   return forwardedFor?.split(",")[0]?.trim() || "unknown";
 }
 
+/** Absolute origin for a clickable /approvals link inside an approval-
+ * notification webhook. Prefers an explicit override (a custom domain,
+ * where VERCEL_URL would give the wrong aliased hostname); falls back to
+ * Vercel's own per-deployment URL; undefined in local dev with neither set
+ * — lib/agent/tools.ts degrades to a relative path in that case. */
+function resolveAppBaseUrl(): string | undefined {
+  if (env.APP_BASE_URL) return env.APP_BASE_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return undefined;
+}
+
 export async function POST(req: NextRequest) {
   const rateLimitResult = checkRateLimit(
     clientIp(req),
@@ -51,7 +62,12 @@ export async function POST(req: NextRequest) {
     const repos = getRepositories(workspaceId);
     const provider = getPaymentProvider(workspaceId);
 
-    const response = await runAgent(messages as AgentMessage[], actor, repos);
+    const response = await runAgent(
+      messages as AgentMessage[],
+      actor,
+      repos,
+      resolveAppBaseUrl(),
+    );
 
     if (response.autoExecute && response.proposalId) {
       try {

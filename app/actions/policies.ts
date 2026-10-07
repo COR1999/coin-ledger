@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
+import { webhookUrlSchema } from "@/lib/notify/webhook";
 import {
   applyPolicyForm,
   policyFormSchema,
@@ -171,5 +172,73 @@ export async function toggleTransparencyAction(
     message: nextEnabled
       ? "Published. Anyone with the link can now see your executed payments."
       : "Unpublished. The page no longer shows your payment history.",
+  };
+}
+
+export interface NotificationWebhookResult {
+  status: "idle" | "success" | "error";
+  message?: string;
+  webhookUrl?: string;
+}
+
+/**
+ * Owner-only. An empty submitted value clears the webhook (disables
+ * notifications) rather than being a validation error — "turn it off" has
+ * to be as easy as "turn it on." A non-empty value is validated with the
+ * same zod schema lib/notify/webhook.ts uses at the call site, so an
+ * invalid or unsafe URL (see that schema's SSRF guard) is rejected here,
+ * at the boundary, before it's ever stored.
+ */
+export async function updateNotificationWebhookAction(
+  _prev: NotificationWebhookResult,
+  formData: FormData,
+): Promise<NotificationWebhookResult> {
+  const repos = getRepositories(await getCurrentWorkspaceId());
+  const [actor, policies] = await Promise.all([
+    getCurrentActor(),
+    repos.policies.get(),
+  ]);
+
+  if (actor.role !== "owner" || !policies.roles[actor.role].canEditPolicies) {
+    return {
+      status: "error",
+      message: "Only the owner may change the notification webhook.",
+    };
+  }
+
+  const raw = String(formData.get("webhookUrl") ?? "").trim();
+
+  if (raw === "") {
+    await repos.policies.set({
+      ...policies,
+      notificationWebhookUrl: undefined,
+    });
+    revalidatePath("/settings");
+    return {
+      status: "success",
+      webhookUrl: "",
+      message: "Notifications disabled.",
+    };
+  }
+
+  const parsed = webhookUrlSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Invalid webhook URL.",
+    };
+  }
+
+  await repos.policies.set({
+    ...policies,
+    notificationWebhookUrl: parsed.data,
+  });
+  revalidatePath("/settings");
+
+  return {
+    status: "success",
+    webhookUrl: parsed.data,
+    message:
+      "Saved. You'll get a notification whenever a payment needs approval or confirmation.",
   };
 }
