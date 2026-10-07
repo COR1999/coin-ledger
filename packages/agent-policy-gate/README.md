@@ -73,6 +73,35 @@ independently checked, not conflated.
   function, not a hardcoded formatter — use it for EUR, USD, USDC,
   whatever.
 
+## How this compares to arc-mirror-kit
+
+The closest prior art found in the Arc ecosystem before building this
+(checked, not assumed — read
+[`dolepee/arc-mirror-kit`](https://github.com/dolepee/arc-mirror-kit)
+directly, 2026-10-03). It's genuinely good work and solves a real,
+different problem — worth naming exactly where the two overlap and where
+they don't, rather than a vague "ours is better":
+
+|                         | `agent-policy-gate`                                                                                                   | `arc-mirror-kit`                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Problem**             | One business's AI agent proposing payments to its own suppliers                                                       | One agent's trade intent, mirrored across many followers who each set their own on-chain risk policy                                              |
+| **Where policy lives**  | Off-chain, a pure TypeScript function — no chain dependency at all                                                    | On-chain, Solidity (`RiskPolicy.sol`, `MirrorRouter.sol`)                                                                                         |
+| **Human approval**      | The core feature — `needs_approval` is a first-class decision, gating execution behind a real person                  | None by design — `MirrorRouter` evaluates each follower's policy automatically and emits `COPIED`/`BLOCKED`, no human in that loop                |
+| **Custody**             | None — it only decides; your own execution path moves money                                                           | `MirrorRouter` itself holds follower USDC deposits                                                                                                |
+| **Decision commitment** | A local SHA-256 hash (`lib/payments/decision-receipt.ts` in the host app) — explicitly _not_ a blockchain attestation | `PilotAttestor.sol` anchors a decision hash **on-chain**, before capital moves — a stronger, genuinely on-chain guarantee for the thing it covers |
+| **Dependencies**        | Zero — pure TypeScript, any stack, any chain or none                                                                  | Foundry/Solidity toolchain, an EVM deployment, Arc's USDC precompile                                                                              |
+
+**The honest summary**: if your problem is "many users, each with their
+own on-chain policy, auto-approving or auto-blocking one agent's intent at
+scale," `arc-mirror-kit` is the better-fitted, more mature tool — its
+on-chain attestation is a stronger guarantee than this package's local
+hash for the case it covers. If your problem is "one business, one AI
+agent proposing payments, and a human must actually say yes before
+anything moves" — the case this package and the host app were built
+for — there's no human-gate primitive in `arc-mirror-kit` to reuse; that's
+the actual gap this package fills, not a general claim of being "more
+innovative."
+
 ## Role model
 
 Ships with a 3-tier `owner` / `accountant` / `employee` hierarchy as a
