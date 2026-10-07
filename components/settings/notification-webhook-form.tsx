@@ -41,7 +41,11 @@ export function NotificationWebhookForm({
       </p>
       {canEdit ? (
         <form action={formAction} className="mt-3 flex flex-wrap gap-2">
+          <label htmlFor="webhookUrl" className="sr-only">
+            Approval-notification webhook URL
+          </label>
           <input
+            id="webhookUrl"
             type="url"
             name="webhookUrl"
             defaultValue={currentValue}
@@ -62,12 +66,13 @@ export function NotificationWebhookForm({
           {currentValue ? "A webhook is configured." : "No webhook configured."}
         </p>
       )}
-      {state.status === "error" && (
-        <p className="mt-2 text-xs text-red-600">{state.message}</p>
-      )}
-      {state.status === "success" && (
-        <p className="mt-2 text-xs text-emerald-600">{state.message}</p>
-      )}
+      <p aria-live="polite" className="mt-2 text-xs">
+        {state.status === "error" ? (
+          <span className="text-red-600">{state.message}</span>
+        ) : state.status === "success" ? (
+          <span className="text-emerald-600">{state.message}</span>
+        ) : null}
+      </p>
     </div>
   );
 }

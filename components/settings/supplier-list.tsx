@@ -85,7 +85,9 @@ export function SupplierList({
                 {!s.employeeApproved && " · Not on the employee-approved list"}
               </p>
               {row?.status === "error" && (
-                <p className="mt-1 text-xs text-red-600">{row.errorMessage}</p>
+                <p aria-live="polite" className="mt-1 text-xs text-red-600">
+                  {row.errorMessage}
+                </p>
               )}
             </div>
             {canEdit && (
@@ -95,6 +97,7 @@ export function SupplierList({
                 variant={effectiveBlocked ? "default" : "outline"}
                 disabled={row?.status === "loading"}
                 onClick={() => handleToggle(s.id)}
+                aria-label={`${effectiveBlocked ? "Unblock" : "Block"} ${s.name}`}
               >
                 {row?.status === "loading"
                   ? "Working…"

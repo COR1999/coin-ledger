@@ -76,7 +76,9 @@ export function PauseToggle({
         ) : null}
       </div>
       {state.status === "error" && (
-        <p className="mt-2 text-xs text-red-600">{state.message}</p>
+        <p aria-live="polite" className="mt-2 text-xs text-red-600">
+          {state.message}
+        </p>
       )}
     </div>
   );
