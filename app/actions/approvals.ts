@@ -1,15 +1,26 @@
 "use server";
 
 import { z } from "zod";
-import { DEMO_SCALE_LABEL } from "@/lib/config";
+import { toActionErrorMessage } from "@/lib/action-error";
 import type { ProposalStatus } from "@/lib/domain/types";
 import { env } from "@/lib/env";
 import { formatEuros } from "@/lib/money";
 import { sendApprovalNotification } from "@/lib/notify/webhook";
 import { evaluateApproval } from "@/lib/policy/engine";
 import { executePayment } from "@/lib/payments/execute";
+import { getExecutionLock } from "@/lib/payments/execution-lock";
+import {
+  describeExecutionOutcome,
+  type ExecutionTrigger,
+} from "@/lib/payments/execution-outcome";
 import { getPaymentProvider } from "@/lib/payments/provider";
+import type { PaymentProvider } from "@/lib/payments/types";
+import {
+  evaluateRejection,
+  REJECTABLE_STATUSES,
+} from "@/lib/payments/rejection";
 import { getRepositories } from "@/lib/repositories/singleton";
+import type { Repositories } from "@/lib/repositories/types";
 import { getCurrentActor } from "@/lib/session";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
 
@@ -46,6 +57,41 @@ export interface ActionResult {
    * staleness-window reason the success path was fixed for.
    */
   status?: ProposalStatus;
+}
+
+/** Another request changed this proposal between our read and our write
+ * (a double-click, or two people acting at once). Nothing was written; the
+ * page should refresh to show the real current state. */
+function staleProposalResult(proposalId: string): ActionResult {
+  return {
+    success: false,
+    message:
+      "This payment was just updated by another action. Refresh to see its current status.",
+    proposalId,
+  };
+}
+
+/** Runs the one server-side execution path and reports the outcome in the
+ * shape the approvals UI expects. */
+async function executeAndReport(
+  proposalId: string,
+  workspaceId: string,
+  repos: Repositories,
+  provider: PaymentProvider,
+  trigger: ExecutionTrigger,
+): Promise<ActionResult> {
+  try {
+    const result = await executePayment(proposalId, repos, provider, {
+      lock: getExecutionLock(workspaceId),
+    });
+    return { ...describeExecutionOutcome(result, trigger), proposalId };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Execution error: ${toActionErrorMessage(error, "executePayment")}`,
+      proposalId,
+    };
+  }
 }
 
 export async function approveProposal(
@@ -88,44 +134,21 @@ export async function approveProposal(
       ? "awaiting_confirmation"
       : "approved";
 
-    await repos.proposals.update(proposalId, {
-      status: newStatus,
-      approvedByActorId: actor.id,
-    });
+    const approved = await repos.proposals.updateIfStatus(
+      proposalId,
+      ["pending"],
+      { status: newStatus, approvedByActorId: actor.id },
+    );
+    if (!approved) return staleProposalResult(proposalId);
 
     if (newStatus === "approved") {
-      try {
-        const result = await executePayment(proposalId, repos, provider);
-        if (result.status === "confirmed") {
-          return {
-            success: true,
-            message: `Payment approved and executed on-chain: ${result.onChainAmount} (${DEMO_SCALE_LABEL}). Tx: ${result.txHash}`,
-            proposalId,
-            txHash: result.txHash,
-            onChainAmount: result.onChainAmount,
-            status: "executed",
-          };
-        } else if (result.status === "failed") {
-          return {
-            success: false,
-            message: `Payment approved but execution failed: ${result.failureReason}`,
-            proposalId,
-            status: "failed",
-          };
-        }
-        return {
-          success: true,
-          message: "Payment approved and submitted (pending confirmation).",
-          proposalId,
-          status: "executing",
-        };
-      } catch (error) {
-        return {
-          success: false,
-          message: `Execution error: ${error instanceof Error ? error.message : "Unknown"}`,
-          proposalId,
-        };
-      }
+      return executeAndReport(
+        proposalId,
+        workspaceId,
+        repos,
+        provider,
+        "approve",
+      );
     }
 
     // A second, distinct human-actionable state from "pending" — the agent
@@ -158,7 +181,7 @@ export async function approveProposal(
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: toActionErrorMessage(error, "approveProposal"),
     };
   }
 }
@@ -207,47 +230,24 @@ export async function confirmProposal(
       };
     }
 
-    await repos.proposals.update(proposalId, {
-      status: "confirmed",
-      confirmedByActorId: actor.id,
-    });
+    const confirmed = await repos.proposals.updateIfStatus(
+      proposalId,
+      ["awaiting_confirmation", "approved"],
+      { status: "confirmed", confirmedByActorId: actor.id },
+    );
+    if (!confirmed) return staleProposalResult(proposalId);
 
-    try {
-      const result = await executePayment(proposalId, repos, provider);
-      if (result.status === "confirmed") {
-        return {
-          success: true,
-          message: `Payment confirmed and executed on-chain: ${result.onChainAmount} (${DEMO_SCALE_LABEL}). Tx: ${result.txHash}`,
-          proposalId,
-          txHash: result.txHash,
-          onChainAmount: result.onChainAmount,
-          status: "executed",
-        };
-      } else if (result.status === "failed") {
-        return {
-          success: false,
-          message: `Payment confirmed but execution failed: ${result.failureReason}`,
-          proposalId,
-          status: "failed",
-        };
-      }
-      return {
-        success: true,
-        message: "Payment confirmed and submitted (pending on-chain).",
-        proposalId,
-        status: "executing",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Execution error: ${error instanceof Error ? error.message : "Unknown"}`,
-        proposalId,
-      };
-    }
+    return executeAndReport(
+      proposalId,
+      workspaceId,
+      repos,
+      provider,
+      "confirm",
+    );
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: toActionErrorMessage(error, "confirmProposal"),
     };
   }
 }
@@ -302,42 +302,11 @@ export async function retryPayment(proposalId: string): Promise<ActionResult> {
       };
     }
 
-    try {
-      const result = await executePayment(proposalId, repos, provider);
-      if (result.status === "confirmed") {
-        return {
-          success: true,
-          message: `Retry succeeded — executed on-chain: ${result.onChainAmount} (${DEMO_SCALE_LABEL}). Tx: ${result.txHash}`,
-          proposalId,
-          txHash: result.txHash,
-          onChainAmount: result.onChainAmount,
-          status: "executed",
-        };
-      } else if (result.status === "failed") {
-        return {
-          success: false,
-          message: `Retry failed again: ${result.failureReason}`,
-          proposalId,
-          status: "failed",
-        };
-      }
-      return {
-        success: true,
-        message: "Retry submitted (pending on-chain confirmation).",
-        proposalId,
-        status: "executing",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Execution error: ${error instanceof Error ? error.message : "Unknown"}`,
-        proposalId,
-      };
-    }
+    return executeAndReport(proposalId, workspaceId, repos, provider, "retry");
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: toActionErrorMessage(error, "retryPayment"),
     };
   }
 }
@@ -347,21 +316,34 @@ export async function rejectProposal(
 ): Promise<ActionResult> {
   try {
     proposalIdSchema.parse(proposalId);
-    const repos = getRepositories(await getCurrentWorkspaceId());
+    const workspaceId = await getCurrentWorkspaceId();
+    const actor = await getCurrentActor();
+    const repos = getRepositories(workspaceId);
 
     const proposal = await repos.proposals.getById(proposalId);
     if (!proposal) {
       return { success: false, message: "Proposal not found" };
     }
 
-    if (proposal.status === "executed" || proposal.status === "rejected") {
-      return {
-        success: false,
-        message: `Cannot reject a proposal with status "${proposal.status}"`,
-      };
+    // Same server-side role check as approve/confirm/retry: the UI only
+    // shows Reject to approvers, but the action itself is directly callable.
+    // Also refuses payments already submitted to the provider (see
+    // lib/payments/rejection.ts).
+    const rejectionCheck = evaluateRejection({
+      actorRole: actor.role,
+      proposal,
+      policies: await repos.policies.get(),
+    });
+    if (!rejectionCheck.permitted) {
+      return { success: false, message: rejectionCheck.reasons.join("; ") };
     }
 
-    await repos.proposals.update(proposalId, { status: "rejected" });
+    const rejected = await repos.proposals.updateIfStatus(
+      proposalId,
+      REJECTABLE_STATUSES,
+      { status: "rejected" },
+    );
+    if (!rejected) return staleProposalResult(proposalId);
 
     return {
       success: true,
@@ -372,7 +354,7 @@ export async function rejectProposal(
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: toActionErrorMessage(error, "rejectProposal"),
     };
   }
 }

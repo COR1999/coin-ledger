@@ -1,12 +1,22 @@
+import { runExclusive } from "@/lib/concurrency";
 import { formatOnChainAmount } from "@/lib/config";
 import { SEED_TODAY } from "@/lib/data/seed";
-import type { PaymentProposal } from "@/lib/domain/types";
+import type { Actor, PaymentProposal, Policies } from "@/lib/domain/types";
 import {
   committedProposalsCents,
   upcomingObligationsCents,
 } from "@/lib/finance/engine";
+import {
+  LockUnavailableError,
+  withDistributedLock,
+  type LockStore,
+} from "@/lib/distributed-lock";
 import { formatCents } from "@/lib/money";
-import { evaluateApproval, evaluatePolicy } from "@/lib/policy/engine";
+import {
+  evaluateApproval,
+  evaluatePolicy,
+  type PolicyDecision,
+} from "@/lib/policy/engine";
 import type { Repositories } from "@/lib/repositories/types";
 import { computeDecisionHash } from "./decision-receipt";
 import { deterministicIdempotencyKey } from "./idempotency";
@@ -35,7 +45,8 @@ export class ExecutionError extends Error {
       | "POLICY_REJECTED"
       | "PROVIDER_FAILED"
       | "MISSING_WALLET_ADDRESS"
-      | "PAYMENTS_PAUSED",
+      | "PAYMENTS_PAUSED"
+      | "IN_PROGRESS",
   ) {
     super(message);
     this.name = "ExecutionError";
@@ -57,37 +68,62 @@ export interface StatusPollOptions {
   maxAttempts?: number;
 }
 
-/**
- * Per-proposal execution lock. Two concurrent calls for the same proposal
- * (a double-click on Approve, or a retry racing the original request) must
- * not both reach the provider or both mutate the balance — every in-memory
- * repository here is a plain object with no locking of its own, so without
- * this, two interleaved calls can each pass the status guards before either
- * writes "executing" and both submit/execute independently. Keyed by
- * proposalId only; unrelated proposals still execute concurrently.
- */
-const proposalLocks = new Map<string, Promise<unknown>>();
-
-function runExclusive<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const previous = proposalLocks.get(key) ?? Promise.resolve();
-  const run = previous.then(fn, fn);
-  const tail = run.catch(() => undefined);
-  proposalLocks.set(key, tail);
-  tail.finally(() => {
-    if (proposalLocks.get(key) === tail) proposalLocks.delete(key);
-  });
-  return run;
+export interface ExecutionLock {
+  /** Shared store every server instance can see (Redis). */
+  store: LockStore;
+  /** Proposal ids are only unique per workspace, so the lock key must be
+   * scoped by workspace or unrelated workspaces would block each other. */
+  scope: string;
 }
 
+export interface ExecuteOptions extends StatusPollOptions {
+  /** Cross-instance lock. Omit when storage isn't shared (in-memory), where
+   * there is no other instance to coordinate with. */
+  lock?: ExecutionLock;
+}
+
+/**
+ * Must exceed one full execution: submit, ~20s of status polling and a
+ * dozen storage round-trips. Only matters if the holder dies mid-execution;
+ * a normal run releases the lock as soon as it finishes.
+ */
+const EXECUTION_LOCK_TTL_MS = 60_000;
+
+/**
+ * Two concurrent calls for the same proposal (a double-click on Approve, or
+ * a retry racing the original request) must not both reach the provider or
+ * both mutate the balance. Two layers:
+ * - In-process mutex: callers in this instance queue, so the second one sees
+ *   the first one's result ("already executed") instead of racing it.
+ * - Distributed lock: a caller on another serverless instance is refused
+ *   with IN_PROGRESS rather than waiting up to ~20s for the first to finish.
+ */
 export async function executePayment(
   proposalId: string,
   repos: Repositories,
   provider: PaymentProvider,
-  pollOptions: StatusPollOptions = {},
+  options: ExecuteOptions = {},
 ): Promise<ExecutionResult> {
-  return runExclusive(proposalId, () =>
-    executePaymentExclusive(proposalId, repos, provider, pollOptions),
-  );
+  const { lock, ...pollOptions } = options;
+  const scope = lock?.scope ?? "local";
+  return runExclusive(`execute:${scope}:${proposalId}`, async () => {
+    try {
+      return await withDistributedLock(
+        lock?.store ?? null,
+        `lock:execute:${scope}:${proposalId}`,
+        { ttlMs: EXECUTION_LOCK_TTL_MS, waitMs: 0, retryDelayMs: 0 },
+        () => executePaymentExclusive(proposalId, repos, provider, pollOptions),
+      );
+    } catch (error) {
+      if (error instanceof LockUnavailableError) {
+        throw new ExecutionError(
+          "This payment is already being processed. Refresh in a moment to see the result.",
+          "IN_PROGRESS",
+        );
+      }
+      throw error;
+    }
+  });
 }
 
 async function executePaymentExclusive(
@@ -224,41 +260,21 @@ async function executePaymentExclusive(
     decidedAt: new Date().toISOString(),
   });
 
-  if (policyResult.decision === "rejected") {
-    await repos.proposals.update(proposalId, {
-      status: "rejected",
-      failureReason: policyResult.reasons.join("; "),
-    });
-    throw new ExecutionError(
-      `Policy re-check rejected: ${policyResult.reasons.join("; ")}`,
-      "POLICY_REJECTED",
-    );
-  }
+  // Resume rather than resubmit: if an earlier call already reached the
+  // provider (paymentId stored) and the proposal is still "executing", the
+  // outcome is unknown, not failed — a prior poll may simply have exhausted
+  // its attempts, or the process may have been interrupted mid-poll.
+  // Submitting again with a fresh idempotency key would risk a genuine
+  // double payment; polling the same paymentId again is always safe.
+  const resuming = proposal.status === "executing" && !!proposal.paymentId;
 
-  if (
-    policyResult.decision === "needs_approval" &&
-    proposal.approvedByActorId
-  ) {
-    const approverActor = actors.find(
-      (a) => a.id === proposal.approvedByActorId,
-    );
-    if (!approverActor) {
-      throw new ExecutionError(
-        `Unknown approver: ${proposal.approvedByActorId}`,
-        "INVALID_APPROVER",
-      );
-    }
-    const approvalCheck = evaluateApproval({
-      approverRole: approverActor.role,
-      amountCents: proposal.amountCents,
-      policies,
-    });
-    if (!approvalCheck.permitted) {
-      throw new ExecutionError(
-        `Approver not authorized: ${approvalCheck.reasons.join("; ")}`,
-        "INVALID_APPROVER",
-      );
-    }
+  // The authorization gates below decide whether money may *start* moving.
+  // A resumed payment was already authorized and submitted, so its on-chain
+  // outcome must still be recorded even if the rules have since changed —
+  // marking it "rejected" here would leave a payment that may have settled
+  // permanently missing from the ledger and balance.
+  if (!resuming) {
+    await enforcePolicyVerdict(proposal, policyResult, actors, policies, repos);
   }
 
   if (!supplier.walletAddress) {
@@ -268,23 +284,25 @@ async function executePaymentExclusive(
     );
   }
 
-  // Resume rather than resubmit: if an earlier call already reached the
-  // provider (paymentId stored) and the proposal is still "executing", the
-  // outcome is unknown, not failed — a prior poll may simply have exhausted
-  // its attempts, or the process may have been interrupted mid-poll.
-  // Submitting again with a fresh idempotency key would risk a genuine
-  // double payment; polling the same paymentId again is always safe.
-  const resuming = proposal.status === "executing" && !!proposal.paymentId;
   let paymentId: string;
 
   if (resuming) {
     paymentId = proposal.paymentId!;
   } else {
     const attemptNumber = proposal.attempts + 1;
-    await repos.proposals.update(proposalId, {
-      status: "executing",
-      attempts: attemptNumber,
-    });
+    // Conditional on the status read at the top: a reject (or anything
+    // else) that landed since must win, not be overwritten by "executing".
+    const claimed = await repos.proposals.updateIfStatus(
+      proposalId,
+      [proposal.status],
+      { status: "executing", attempts: attemptNumber },
+    );
+    if (!claimed) {
+      throw new ExecutionError(
+        `Proposal ${proposalId} changed while it was being executed; nothing was sent`,
+        "INVALID_STATUS",
+      );
+    }
 
     const idempotencyKey = deterministicIdempotencyKey(
       `proposal-${proposalId}-${proposal.createdAt}-attempt-${attemptNumber}`,
@@ -373,4 +391,80 @@ async function executePaymentExclusive(
     onChainAmount: formatOnChainAmount(proposal.amountCents),
     failureReason: status.failureReason,
   };
+}
+
+/**
+ * Enforces the live re-check's verdict, not the one stored on the proposal
+ * when it was created. Policies can change between proposal and execution
+ * (an owner lowers a role's limit or the confirmation threshold), so a
+ * proposal stored as "allowed" may now need approval or confirmation that
+ * nobody has given. Fails closed: throws before anything reaches the
+ * provider, after moving the proposal into the state where a human can give
+ * the missing approval or confirmation (or reject it).
+ */
+async function enforcePolicyVerdict(
+  proposal: PaymentProposal,
+  policyResult: PolicyDecision,
+  actors: Actor[],
+  policies: Policies,
+  repos: Repositories,
+): Promise<void> {
+  if (policyResult.decision === "rejected") {
+    await repos.proposals.update(proposal.id, {
+      status: "rejected",
+      failureReason: policyResult.reasons.join("; "),
+    });
+    throw new ExecutionError(
+      `Policy re-check rejected: ${policyResult.reasons.join("; ")}`,
+      "POLICY_REJECTED",
+    );
+  }
+
+  if (policyResult.decision === "needs_approval") {
+    if (!proposal.approvedByActorId) {
+      // Back into the approval queue rather than left in a state with no
+      // matching action: an approver can now approve or reject it there.
+      await repos.proposals.update(proposal.id, {
+        status: "pending",
+        policyDecision: "needs_approval",
+        requiredApproverRole: policyResult.requiredApproverRole,
+        requiresConfirmation: policyResult.requiresConfirmation,
+      });
+      throw new ExecutionError(
+        `Policies changed since this payment was proposed: ${policyResult.reasons.join("; ")}. It has been returned to the approval queue.`,
+        "MISSING_APPROVAL",
+      );
+    }
+    const approverActor = actors.find(
+      (a) => a.id === proposal.approvedByActorId,
+    );
+    if (!approverActor) {
+      throw new ExecutionError(
+        `Unknown approver: ${proposal.approvedByActorId}`,
+        "INVALID_APPROVER",
+      );
+    }
+    const approvalCheck = evaluateApproval({
+      approverRole: approverActor.role,
+      amountCents: proposal.amountCents,
+      policies,
+    });
+    if (!approvalCheck.permitted) {
+      throw new ExecutionError(
+        `Approver not authorized: ${approvalCheck.reasons.join("; ")}`,
+        "INVALID_APPROVER",
+      );
+    }
+  }
+
+  if (policyResult.requiresConfirmation && !proposal.confirmedByActorId) {
+    await repos.proposals.update(proposal.id, {
+      status: "awaiting_confirmation",
+      requiresConfirmation: true,
+    });
+    throw new ExecutionError(
+      "Policies changed since this payment was proposed: it is now above the confirmation threshold and is waiting for confirmation.",
+      "MISSING_CONFIRMATION",
+    );
+  }
 }
