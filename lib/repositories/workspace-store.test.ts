@@ -8,7 +8,9 @@ import {
   registerWorkspace,
   setKvClientProvider,
   workspaceExists,
+  workspaceIdSchema,
 } from "./workspace-store";
+import { createInMemoryLockStore } from "@/lib/distributed-lock";
 
 describe("getRepositories", () => {
   it("lazily creates the demo workspace, seeded with Mario's Coffee", async () => {
@@ -71,6 +73,7 @@ describe("demo workspace uses the configured KV client too, with a reset policy"
         return null;
       },
       set: async () => "OK",
+      ...createInMemoryLockStore(),
     };
     setKvClientProvider(() => kv);
 
@@ -88,6 +91,7 @@ describe("demo workspace uses the configured KV client too, with a reset policy"
         return null;
       },
       set: async () => "OK",
+      ...createInMemoryLockStore(),
     };
     setKvClientProvider(() => kv);
 
@@ -105,6 +109,7 @@ describe("workspaceExists for the demo workspace", () => {
     const kv: KvClient = {
       get: async () => null,
       set: async () => "OK",
+      ...createInMemoryLockStore(),
     };
     setKvClientProvider(() => kv);
 
@@ -113,5 +118,21 @@ describe("workspaceExists for the demo workspace", () => {
 
   it("reports true with no KV client configured at all", async () => {
     expect(await workspaceExists(DEMO_WORKSPACE_ID)).toBe(true);
+  });
+});
+
+describe("workspaceIdSchema", () => {
+  it("accepts the demo id and onboarding's ws-<uuid> ids", () => {
+    expect(workspaceIdSchema.safeParse("demo").success).toBe(true);
+    expect(
+      workspaceIdSchema.safeParse("ws-3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b")
+        .success,
+    ).toBe(true);
+  });
+
+  it("rejects anything else before it can become a Redis key", () => {
+    for (const id of ["", "ws-", "waitlist", "ws-../../x", "DEMO", "ws-xyz"]) {
+      expect(workspaceIdSchema.safeParse(id).success).toBe(false);
+    }
   });
 });

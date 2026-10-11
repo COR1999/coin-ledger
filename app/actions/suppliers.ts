@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { getRepositories } from "@/lib/repositories/singleton";
 import { getCurrentActor } from "@/lib/session";
@@ -22,9 +23,14 @@ export interface SupplierToggleResult {
  * pattern as every other mutating action in this app — never trusted from
  * a client flag.
  */
+const supplierIdSchema = z.string().min(1).max(100);
+
 export async function toggleSupplierBlockedAction(
   supplierId: string,
 ): Promise<SupplierToggleResult> {
+  if (!supplierIdSchema.safeParse(supplierId).success) {
+    return { success: false, message: "Invalid request." };
+  }
   const repos = getRepositories(await getCurrentWorkspaceId());
   const [actor, policies, supplier] = await Promise.all([
     getCurrentActor(),

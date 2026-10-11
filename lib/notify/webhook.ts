@@ -15,6 +15,8 @@
 import { isIP } from "node:net";
 import { z } from "zod";
 
+import { describeError } from "@/lib/log-error";
+
 /**
  * Validated at the settings boundary, not just the webhook call site —
  * zod at every boundary per CLAUDE.md. Requires https (no plaintext
@@ -134,8 +136,16 @@ export async function sendApprovalNotification(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildWebhookPayload(url, event)),
       signal: AbortSignal.timeout(5_000),
+      // webhookUrlSchema only vets the URL as typed. Following a redirect
+      // would let a public URL bounce this request to an internal or
+      // metadata address it was meant to block. Slack and Discord webhooks
+      // never redirect.
+      redirect: "error",
     });
   } catch (error) {
-    console.error("Approval notification webhook failed:", error);
+    console.error(
+      "Approval notification webhook failed:",
+      describeError(error),
+    );
   }
 }

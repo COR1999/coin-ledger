@@ -1,5 +1,6 @@
 "use server";
 
+import { describeError } from "@/lib/log-error";
 import { revalidatePath } from "next/cache";
 
 import { setCurrentActor } from "@/lib/session";
@@ -23,7 +24,7 @@ export async function selectActorAction(formData: FormData): Promise<void> {
     // documented throw) — but logged, not silently dropped, so a genuinely
     // unexpected failure here (e.g. a session-store outage) still leaves a
     // trail in server logs instead of vanishing with zero diagnostic trace.
-    console.error("selectActorAction failed:", error);
+    console.error("selectActorAction failed:", describeError(error));
     return;
   }
   revalidatePath("/", "layout");

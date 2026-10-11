@@ -4,7 +4,11 @@ import { PublicTransactionList } from "@/components/transparency/public-transact
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEMO_SCALE_LABEL } from "@/lib/config";
 import { recentTransactions } from "@/lib/finance/dashboard";
-import { getRepositories, workspaceExists } from "@/lib/repositories/singleton";
+import {
+  getRepositories,
+  workspaceExists,
+  workspaceIdSchema,
+} from "@/lib/repositories/singleton";
 
 /**
  * Public, no-login "proof of operations" page — the owner's opt-in answer to
@@ -25,7 +29,10 @@ export default async function PublicTransparencyPage({
 }) {
   const { workspaceId } = await params;
 
-  if (!(await workspaceExists(workspaceId))) {
+  if (
+    !workspaceIdSchema.safeParse(workspaceId).success ||
+    !(await workspaceExists(workspaceId))
+  ) {
     notFound();
   }
 

@@ -11,6 +11,7 @@ import { cookies } from "next/headers";
 import {
   DEMO_WORKSPACE_ID,
   workspaceExists,
+  workspaceIdSchema,
 } from "@/lib/repositories/singleton";
 
 const WORKSPACE_COOKIE = "workspaceId";
@@ -25,6 +26,7 @@ export async function getCurrentWorkspaceId(): Promise<string> {
   const store = await cookies();
   const id = store.get(WORKSPACE_COOKIE)?.value;
   if (!id || id === DEMO_WORKSPACE_ID) return DEMO_WORKSPACE_ID;
+  if (!workspaceIdSchema.safeParse(id).success) return DEMO_WORKSPACE_ID;
   return (await workspaceExists(id)) ? id : DEMO_WORKSPACE_ID;
 }
 

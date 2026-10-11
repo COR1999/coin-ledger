@@ -55,6 +55,24 @@ describe("transactionsToCsv", () => {
     expect(csv).toContain('"The ""good"" supplier"');
   });
 
+  it.each(["=", "+", "-", "@", "\t", "\r"])(
+    "neutralizes a free-text field starting with %j so spreadsheets don't run it as a formula",
+    (prefix) => {
+      const payload = `${prefix}HYPERLINK("http://evil.example","x")`;
+      const csv = transactionsToCsv([
+        tx({ description: payload, category: payload }),
+      ]);
+      const row = csv.split("\r\n")[1];
+      expect(row).not.toMatch(/(^|,)"?[=+\-@\t\r]HYPERLINK/);
+      expect(row).toContain(`'${prefix}HYPERLINK`);
+    },
+  );
+
+  it("leaves negative amounts numeric, not text-prefixed", () => {
+    const csv = transactionsToCsv([tx({ amountCents: -1_200 })]);
+    expect(csv.split("\r\n")[1]).toContain(",-12.00,");
+  });
+
   it("includes the tx hash, explorer URL and decision hash when present", () => {
     const csv = transactionsToCsv([
       tx({

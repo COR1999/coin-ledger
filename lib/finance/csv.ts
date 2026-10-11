@@ -22,10 +22,22 @@ const COLUMNS = [
  * field contains a comma, quote or newline — a supplier name or reason an
  * owner typed is untrusted input by the time it reaches here. */
 function csvField(value: string): string {
-  if (/[",\n]/.test(value)) {
+  if (/[",\r\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
+}
+
+/** Spreadsheet apps execute a cell starting with one of these as a formula
+ * (CSV injection, OWASP "CSV Injection"). */
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+/** For free-text columns only: prefixes a leading formula trigger with `'`
+ * so Excel/Sheets show it as text. Supplier names and payment reasons are
+ * typed by users or written by the agent, so they can start with "=".
+ * Not applied to the amount column, whose leading "-" is a real sign. */
+function textField(value: string): string {
+  return FORMULA_TRIGGER.test(value) ? `'${value}` : value;
 }
 
 function toRow(values: readonly string[]): string {
@@ -45,8 +57,8 @@ export function transactionsToCsv(
   const rows = sorted.map((t) =>
     toRow([
       t.date,
-      t.description,
-      t.category,
+      textField(t.description),
+      textField(t.category),
       formatCents(t.amountCents),
       t.txHash ?? "",
       t.txHash ? arcExplorerTxUrl(t.txHash) : "",
