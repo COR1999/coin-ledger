@@ -1,14 +1,9 @@
 /**
  * Generic per-key in-process mutex: serializes calls sharing a key so their
- * bodies never interleave within one process — the pattern this app already
- * used once, privately, in lib/payments/execute.ts (keyed by proposal id,
- * guarding the provider-submission race). Extracted here because
- * lib/repositories/kv-snapshot.ts and lib/repositories/waitlist.ts need the
- * exact same shape (serializing load-mutate-save-back of a shared blob) and
- * a third copy-pasted implementation would be the actual duplication, not
- * reusing this one. execute.ts's own copy is left as-is — it's already
- * tested in place and touching working, safety-critical code for a cosmetic
- * dedupe isn't worth the risk.
+ * bodies never interleave within one process. Used by payment execution,
+ * the Redis-backed workspace store and the waitlist. Only covers one
+ * process; pair it with lib/distributed-lock.ts where serverless instances
+ * share state.
  */
 const locks = new Map<string, Promise<unknown>>();
 
