@@ -34,9 +34,15 @@ import type {
 } from "@/lib/domain/types";
 import { runExclusive } from "@/lib/concurrency";
 import {
+  withDistributedLock,
+  type LockOptions,
+  type LockStore,
+} from "@/lib/distributed-lock";
+import {
   createInMemoryRepositories,
   type RepositorySeedData,
 } from "./in-memory";
+import { parseStored, workspaceSnapshotSchema } from "./snapshot-schema";
 import type {
   ActorRepository,
   BusinessRepository,
@@ -90,10 +96,19 @@ export interface ResetPolicy {
  * from this app's domain types (strings/numbers/arrays — no Date objects,
  * no class instances), so it round-trips through JSON cleanly either way.
  */
-export interface KvClient {
+export interface KvClient extends LockStore {
   get(key: string): Promise<unknown>;
   set(key: string, value: unknown): Promise<unknown>;
 }
+
+/** Lock for one workspace's read-modify-write. Every mutation is a single
+ * Redis GET plus SET, so waits are short; the TTL only matters if a holder
+ * dies mid-write. */
+const SNAPSHOT_LOCK_OPTIONS: LockOptions = {
+  ttlMs: 10_000,
+  waitMs: 8_000,
+  retryDelayMs: 50,
+};
 
 function toSnapshot(data: RepositorySeedData): WorkspaceSnapshot {
   return {
@@ -159,15 +174,13 @@ function resetLockKey(workspaceId: string): string {
 /**
  * Redis-backed Repositories for one workspace.
  *
- * Known, deliberate limitation: `runExclusive` (lib/concurrency.ts) only
- * serializes operations against one workspace *within one process* — two
- * concurrent requests hitting two different serverless instances can still
- * race — last write wins at the whole-blob level. This fixes the confirmed,
- * demo-blocking bug (state vanishing entirely between requests) without
- * claiming to be a full distributed-transaction store; Circle's own
- * idempotency-key dedup remains the backstop against a genuine double
- * payment submission reaching the chain twice regardless of which process
- * handled which request (see lib/payments/idempotency.ts).
+ * Concurrency: mutations hold an in-process mutex plus a Redis lock per
+ * workspace (lib/distributed-lock.ts), so two serverless instances can't
+ * interleave a read-modify-write of the same blob and lose one update.
+ * Reads take no lock. One narrow gap remains: the demo workspace's periodic
+ * reseed (below) writes under only an in-process lock, so a mutation landing
+ * on another instance at that exact moment can be overwritten. The reseed
+ * wipes demo data anyway, so this is accepted rather than guarded.
  */
 export class KvRepositories implements Repositories {
   constructor(
@@ -187,11 +200,12 @@ export class KvRepositories implements Repositories {
   ) {}
 
   private async loadFresh(): Promise<WorkspaceSnapshot> {
-    const raw = await this.client.get(snapshotKey(this.workspaceId));
+    const key = snapshotKey(this.workspaceId);
+    const raw = await this.client.get(key);
     if (raw === null || raw === undefined) {
       return toSnapshot(this.seedIfMissing());
     }
-    return raw as WorkspaceSnapshot;
+    return parseStored(workspaceSnapshotSchema, key, raw);
   }
 
   private isStale(resetAt: string | undefined): boolean {
@@ -226,22 +240,36 @@ export class KvRepositories implements Repositories {
 
   /** For mutations: load, run `op`, save whatever the in-memory repos ended
    * up holding, under the per-workspace mutex — the full read-modify-write
-   * cycle a write needs to not lose a concurrent write within this process. */
+   * cycle a write needs to not lose a concurrent write. The in-process
+   * mutex queues callers within this instance; the Redis lock inside it
+   * stops another serverless instance writing the same blob in between. */
   private withRepositories<T>(
     op: (repos: Repositories) => Promise<T>,
   ): Promise<T> {
-    return runExclusive(snapshotKey(this.workspaceId), async () => {
-      const snapshot = await this.load();
-      const repos = createInMemoryRepositories(snapshot);
-      const result = await op(repos);
-      const next = await snapshotFromRepositories(repos);
-      // resetAt is reset-policy metadata, not something the in-memory repos
-      // know about — carry forward whatever `load()` already resolved it
-      // to, rather than losing it (and so, accidentally, the staleness
-      // clock) on every single write.
-      await this.save({ ...next, resetAt: snapshot.resetAt });
-      return result;
-    });
+    const key = snapshotKey(this.workspaceId);
+    return runExclusive(key, () =>
+      withDistributedLock(
+        this.client,
+        `lock:${key}`,
+        SNAPSHOT_LOCK_OPTIONS,
+        () => this.readModifyWrite(op),
+      ),
+    );
+  }
+
+  private async readModifyWrite<T>(
+    op: (repos: Repositories) => Promise<T>,
+  ): Promise<T> {
+    const snapshot = await this.load();
+    const repos = createInMemoryRepositories(snapshot);
+    const result = await op(repos);
+    const next = await snapshotFromRepositories(repos);
+    // resetAt is reset-policy metadata, not something the in-memory repos
+    // know about — carry forward whatever `load()` already resolved it
+    // to, rather than losing it (and so, accidentally, the staleness
+    // clock) on every single write.
+    await this.save({ ...next, resetAt: snapshot.resetAt });
+    return result;
   }
 
   /**
@@ -314,6 +342,10 @@ export class KvRepositories implements Repositories {
       this.withRepositories((r) => r.proposals.setStatus(id, status)),
     update: (id, fields: ProposalUpdate) =>
       this.withRepositories((r) => r.proposals.update(id, fields)),
+    updateIfStatus: (id, expectedStatuses, fields: ProposalUpdate) =>
+      this.withRepositories((r) =>
+        r.proposals.updateIfStatus(id, expectedStatuses, fields),
+      ),
   };
 
   obligations: ObligationRepository = {

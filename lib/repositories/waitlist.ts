@@ -18,7 +18,21 @@
  */
 import type { WaitlistSignup, WaitlistSignupInput } from "@/lib/domain/types";
 import { runExclusive } from "@/lib/concurrency";
+import { withDistributedLock, type LockOptions } from "@/lib/distributed-lock";
 import type { KvClient } from "@/lib/repositories/kv-snapshot";
+import {
+  parseStored,
+  waitlistSchema,
+} from "@/lib/repositories/snapshot-schema";
+
+/** Appending a signup is one GET plus one SET; see kv-snapshot.ts. Without
+ * the Redis lock, two signups landing on different serverless instances at
+ * once would each append to the same old list and one would be lost. */
+const WAITLIST_LOCK_OPTIONS: LockOptions = {
+  ttlMs: 10_000,
+  waitMs: 8_000,
+  retryDelayMs: 50,
+};
 
 const WAITLIST_KEY = "waitlist:signups";
 
@@ -46,7 +60,9 @@ function currentKvClient(): KvClient | null {
 
 async function loadFromKv(client: KvClient): Promise<WaitlistSignup[]> {
   const raw = await client.get(WAITLIST_KEY);
-  return (raw as WaitlistSignup[] | null | undefined) ?? [];
+  return raw === null || raw === undefined
+    ? []
+    : parseStored(waitlistSchema, WAITLIST_KEY, raw);
 }
 
 export async function addWaitlistSignup(
@@ -60,11 +76,18 @@ export async function addWaitlistSignup(
 
   const kv = currentKvClient();
   if (kv) {
-    await runExclusive(WAITLIST_KEY, async () => {
-      const current = await loadFromKv(kv);
-      current.push(signup);
-      await kv.set(WAITLIST_KEY, current);
-    });
+    await runExclusive(WAITLIST_KEY, () =>
+      withDistributedLock(
+        kv,
+        `lock:${WAITLIST_KEY}`,
+        WAITLIST_LOCK_OPTIONS,
+        async () => {
+          const current = await loadFromKv(kv);
+          current.push(signup);
+          await kv.set(WAITLIST_KEY, current);
+        },
+      ),
+    );
     return signup;
   }
 

@@ -1,7 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { notFound } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { canViewWaitlistAdmin } from "@/lib/admin-access";
 import { env } from "@/lib/env";
 import { listWaitlistSignups } from "@/lib/repositories/waitlist-singleton";
 import { DEMO_WORKSPACE_ID } from "@/lib/repositories/singleton";
@@ -22,11 +22,11 @@ import { getCurrentWorkspaceId } from "@/lib/workspace";
  * anonymous visitor — confirmed live via a cookieless curl request
  * returning 200, 2026-10-03. Fixed by requiring a real shared secret.
  *
- * Falls back to the old role check only when WAITLIST_ADMIN_SECRET isn't
- * set at all (local dev without it configured) — never on a deployment
- * where it's expected to be set. `notFound()` rather than a "forbidden"
- * message, so the route's existence isn't confirmed to someone who
- * shouldn't be looking for it.
+ * Falls back to the old role check only in development with
+ * WAITLIST_ADMIN_SECRET unset; a production build without the secret
+ * denies everyone (see lib/admin-access.ts). `notFound()` rather than a
+ * "forbidden" message, so the route's existence isn't confirmed to someone
+ * who shouldn't be looking for it.
  */
 export default async function WaitlistAdminPage({
   searchParams,
@@ -39,9 +39,12 @@ export default async function WaitlistAdminPage({
     getCurrentActor(),
   ]);
 
-  const authorized = env.WAITLIST_ADMIN_SECRET
-    ? secretMatches(secret, env.WAITLIST_ADMIN_SECRET)
-    : workspaceId === DEMO_WORKSPACE_ID && actor.role === "owner";
+  const authorized = canViewWaitlistAdmin({
+    configuredSecret: env.WAITLIST_ADMIN_SECRET,
+    providedSecret: secret,
+    isProduction: process.env.NODE_ENV === "production",
+    isDemoOwner: workspaceId === DEMO_WORKSPACE_ID && actor.role === "owner",
+  });
 
   if (!authorized) {
     notFound();
@@ -99,15 +102,4 @@ export default async function WaitlistAdminPage({
       </main>
     </div>
   );
-}
-
-/** Constant-time comparison so response timing can't leak the secret. */
-function secretMatches(
-  provided: string | undefined,
-  expected: string,
-): boolean {
-  if (!provided) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
 }

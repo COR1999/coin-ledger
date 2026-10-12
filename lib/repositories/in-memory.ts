@@ -224,6 +224,23 @@ class InMemoryPaymentProposalRepository implements PaymentProposalRepository {
     this.proposals.set(id, updated);
     return clone(updated);
   }
+
+  async updateIfStatus(
+    id: string,
+    expectedStatuses: readonly PaymentProposal["status"][],
+    fields: import("./types").ProposalUpdate,
+  ): Promise<PaymentProposal | null> {
+    // No await between the check and the write: atomic within this process,
+    // and KvRepositories runs this whole method under its workspace lock.
+    const existing = this.proposals.get(id);
+    if (!existing) {
+      throw new Error(`Unknown proposal: ${id}`);
+    }
+    if (!expectedStatuses.includes(existing.status)) return null;
+    const updated = { ...existing, ...fields };
+    this.proposals.set(id, updated);
+    return clone(updated);
+  }
 }
 
 export interface RepositorySeedData {

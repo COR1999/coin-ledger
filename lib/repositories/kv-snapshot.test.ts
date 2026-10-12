@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createInMemoryLockStore } from "@/lib/distributed-lock";
 import { eur } from "@/lib/money";
 import type { RepositorySeedData } from "./in-memory";
 import {
@@ -14,6 +15,7 @@ import {
 function fakeKvClient(): KvClient {
   const store = new Map<string, unknown>();
   return {
+    ...createInMemoryLockStore(),
     get: async (key) => store.get(key) ?? null,
     set: async (key, value) => {
       store.set(key, value);
@@ -303,7 +305,7 @@ describe("reads skip the write-back and the per-workspace mutex", () => {
     let setCalls = 0;
     const base = fakeKvClient();
     const client: KvClient = {
-      get: base.get,
+      ...base,
       set: async (key, value) => {
         setCalls += 1;
         return base.set(key, value);
@@ -330,7 +332,7 @@ describe("reads skip the write-back and the per-workspace mutex", () => {
     let setCalls = 0;
     const base = fakeKvClient();
     const client: KvClient = {
-      get: base.get,
+      ...base,
       set: async (key, value) => {
         setCalls += 1;
         return base.set(key, value);
@@ -372,5 +374,69 @@ describe("kvWorkspaceExists / registerKvWorkspace", () => {
     expect(await kvWorkspaceExists(client, "ws-new")).toBe(true);
     const repos = new KvRepositories(client, "ws-new", seedData());
     expect((await repos.business.get()).name).toBe("Riverside Bakery");
+  });
+});
+
+describe("cross-instance write lock", () => {
+  it("holds a mutation until another instance releases the workspace lock", async () => {
+    const client = fakeKvClient();
+    const repos = new KvRepositories(client, "ws-test", seedData());
+    // Simulate another serverless instance mid-write on the same workspace.
+    expect(
+      await client.tryAcquireLock("lock:workspace:ws-test", "other", 10_000),
+    ).toBe(true);
+
+    let done = false;
+    const write = repos.business
+      .adjustBalanceCents(eur(10))
+      .then(() => (done = true));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(done).toBe(false);
+
+    await client.releaseLock("lock:workspace:ws-test", "other");
+    await write;
+    expect(done).toBe(true);
+    expect((await repos.business.get()).currentBalanceCents).toBe(
+      eur(5_000) + eur(10),
+    );
+  });
+
+  it("releases the lock after each mutation", async () => {
+    const client = fakeKvClient();
+    const repos = new KvRepositories(client, "ws-test", seedData());
+    await repos.business.adjustBalanceCents(eur(10));
+    expect(
+      await client.tryAcquireLock("lock:workspace:ws-test", "next", 1_000),
+    ).toBe(true);
+  });
+});
+
+describe("updateIfStatus through the Redis snapshot", () => {
+  it("applies or refuses atomically against the stored status", async () => {
+    const repos = new KvRepositories(fakeKvClient(), "ws-test", seedData());
+    const proposal = await repos.proposals.create({
+      supplierId: "supplier-1",
+      amountCents: eur(50),
+      currency: "EUR",
+      reason: "Flour",
+      proposedByActorId: "owner",
+      policyDecision: "allowed",
+      requiresConfirmation: false,
+      status: "pending",
+    });
+
+    expect(
+      await repos.proposals.updateIfStatus(proposal.id, ["pending"], {
+        status: "rejected",
+      }),
+    ).toMatchObject({ status: "rejected" });
+    expect(
+      await repos.proposals.updateIfStatus(proposal.id, ["pending"], {
+        status: "approved",
+      }),
+    ).toBeNull();
+    expect((await repos.proposals.getById(proposal.id))!.status).toBe(
+      "rejected",
+    );
   });
 });

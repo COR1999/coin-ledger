@@ -194,16 +194,23 @@ With both set, `lib/repositories/kv-snapshot.ts` takes over: each
 workspace's entire state is stored as one JSON snapshot per workspace, read
 and rewritten on every repository call, rehydrated through the exact same
 `InMemory*Repository` classes used locally — one implementation of the
-business rules, not two to keep in sync. **Known, disclosed limitation**:
-this serializes operations against one workspace within a single process
-(see `runExclusive` usage in `kv-snapshot.ts`), but two requests landing on
-two different serverless instances at the same instant can still race —
-last write wins at the whole-snapshot level. This is a deliberate trade-off,
-not an oversight: it turns a confirmed _data-loss_ bug into a much rarer,
-lower-stakes _lost-update_ race, and Circle's own idempotency-key dedup
-remains the backstop against a real payment being submitted to the chain
-twice regardless of which instance handled which request. Unset (the
-default), nothing about current behavior changes.
+business rules, not two to keep in sync.
+
+**Concurrency across serverless instances.** Every write to a workspace
+holds a short Redis lock (`SET NX` with an expiry, released by token; see
+`lib/distributed-lock.ts`), so two instances can't interleave a
+read-modify-write and lose an update. Payment execution holds its own
+per-proposal lock: a second instance trying to execute the same payment is
+refused with "already being processed" instead of submitting it twice.
+Human actions (approve, confirm, reject) only change a proposal if its
+status is still what the person saw, so a stale double-click can't undo a
+newer state. Snapshots read back from Redis are validated with zod
+(`lib/repositories/snapshot-schema.ts`); corrupt data fails loudly rather
+than flowing into the policy engine. One narrow gap is accepted: the demo
+workspace's periodic reseed can overwrite a write landing on another
+instance at that exact moment, which only loses demo data being wiped
+anyway. Without the Redis env vars (the default), storage stays in memory
+and nothing about current behavior changes.
 
 Note: once configured, `app/layout.tsx`'s per-request theme lookup becomes a
 real network call (it reads the demo business from the same repository
@@ -279,6 +286,11 @@ npm run typecheck
 npm run lint
 ```
 
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests
+and a production build on every push and pull request. The build uses a
+placeholder `GOOGLE_API_KEY` and the mock payment provider, so CI never
+needs a real secret.
+
 No network calls in unit tests — `PaymentProvider` is injected, so the
 execution path and the mock provider are tested without hitting Arc or
 Circle. `lib/payments/arc.ts` (the real Circle-backed provider) is a thin SDK
@@ -342,8 +354,10 @@ steps — confirmed live via a cookieless `curl` request returning `200`
 within minutes of the first deployment (see `BUILD_LOG.md`, 2026-10-03).
 `WAITLIST_ADMIN_SECRET` is a real, out-of-band secret instead, compared
 with a constant-time check so response timing can't leak it. Locally,
-with the env var unset, the old role check still works unchanged — it's
-only a real gate once deployed with the secret configured.
+in development with the env var unset, the old role check still works.
+A production build (`next start`, Vercel) without the secret denies
+everyone, so a deployment that forgets to set it fails closed instead of
+exposing signups.
 
 ## Layout
 

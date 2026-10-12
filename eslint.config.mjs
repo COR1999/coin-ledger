@@ -6,6 +6,21 @@ import prettier from "eslint-config-prettier";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    rules: {
+      // Leading underscore marks a parameter that must exist for a calling
+      // convention (e.g. useActionState's previous-state argument) but is
+      // intentionally unused, instead of per-line eslint-disable comments.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
   // Disable ESLint rules that conflict with Prettier formatting. Must be last.
   prettier,
   // Override default ignores of eslint-config-next.

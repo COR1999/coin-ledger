@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildWebhookPayload, webhookUrlSchema } from "./webhook";
+import {
+  buildWebhookPayload,
+  sendApprovalNotification,
+  webhookUrlSchema,
+} from "./webhook";
 
 const EVENT = {
   supplierName: "ABC Coffee",
@@ -141,5 +145,22 @@ describe("buildWebhookPayload", () => {
     });
     expect(payload.message).toContain("Mario proposed paying");
     expect(payload.message).not.toContain("Mario approved");
+  });
+});
+
+describe("sendApprovalNotification", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("refuses to follow redirects, so a public URL can't bounce to an internal one", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendApprovalNotification("https://hooks.example.com/x", EVENT);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: "error" });
   });
 });

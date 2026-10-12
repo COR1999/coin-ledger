@@ -94,6 +94,9 @@ export type ProposalUpdate = Partial<
     | "txHash"
     | "failureReason"
     | "attempts"
+    | "policyDecision"
+    | "requiredApproverRole"
+    | "requiresConfirmation"
   >
 >;
 
@@ -106,6 +109,18 @@ export interface PaymentProposalRepository {
     status: PaymentProposal["status"],
   ): Promise<PaymentProposal>;
   update(id: string, fields: ProposalUpdate): Promise<PaymentProposal>;
+  /**
+   * Applies `fields` only if the proposal's status is still one of
+   * `expectedStatuses`, atomically (check and write happen under the same
+   * lock). Returns null if the status moved on. Human actions use this so a
+   * stale read can't overwrite a newer state, e.g. a slow second "Confirm"
+   * resetting an already-executed payment back to "confirmed".
+   */
+  updateIfStatus(
+    id: string,
+    expectedStatuses: readonly PaymentProposal["status"][],
+    fields: ProposalUpdate,
+  ): Promise<PaymentProposal | null>;
 }
 
 export interface Repositories {

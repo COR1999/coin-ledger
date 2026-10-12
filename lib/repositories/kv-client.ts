@@ -13,6 +13,13 @@ import { Redis } from "@upstash/redis";
 import { env } from "@/lib/env";
 import type { KvClient } from "./kv-snapshot";
 
+/** Delete the lock only if it still holds our token, atomically, so a
+ * holder whose lock already expired can't release someone else's. */
+const RELEASE_LOCK_SCRIPT = `if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0`;
+
 let cached: KvClient | null | undefined;
 
 /**
@@ -37,6 +44,11 @@ export function getKvClientIfConfigured(): KvClient | null {
   cached = {
     get: (key) => redis.get(key),
     set: (key, value) => redis.set(key, value),
+    tryAcquireLock: async (key, token, ttlMs) =>
+      (await redis.set(key, token, { nx: true, px: ttlMs })) === "OK",
+    releaseLock: async (key, token) => {
+      await redis.eval(RELEASE_LOCK_SCRIPT, [key], [token]);
+    },
   };
   return cached;
 }

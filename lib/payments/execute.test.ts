@@ -4,6 +4,7 @@ import { createInMemoryRepositories } from "@/lib/repositories/in-memory";
 import type { Repositories } from "@/lib/repositories/types";
 import type { PaymentProvider, PaymentStatus } from "./types";
 import { executePayment, ExecutionError } from "./execute";
+import { createInMemoryLockStore } from "@/lib/distributed-lock";
 import { eur } from "@/lib/money";
 
 function createMockProvider(
@@ -249,6 +250,78 @@ describe("executePayment", () => {
     } catch (e) {
       expect((e as ExecutionError).code).toBe("INVALID_APPROVER");
     }
+  });
+
+  it("blocks execution when the re-check now needs approval and none was given", async () => {
+    // Proposed as "allowed" (€30, under the employee's €100 limit), then the
+    // owner tightened that limit before it executed. The stored decision is
+    // stale; the live re-check's verdict must be the one enforced.
+    const proposal = await createApprovedProposal(repos);
+    const policies = await repos.policies.get();
+    await repos.policies.set({
+      ...policies,
+      roles: {
+        ...policies.roles,
+        employee: {
+          ...policies.roles.employee,
+          maxSinglePaymentCents: eur(20),
+        },
+      },
+    });
+    let submitted = false;
+    const provider: PaymentProvider = {
+      ...createMockProvider(),
+      submit: async () => {
+        submitted = true;
+        return { paymentId: "pay-1", status: "pending" };
+      },
+    };
+
+    await expect(
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ).rejects.toMatchObject({ code: "MISSING_APPROVAL" });
+    expect(submitted).toBe(false);
+    const requeued = await repos.proposals.getById(proposal.id);
+    expect(requeued).toMatchObject({
+      status: "pending",
+      policyDecision: "needs_approval",
+      requiredApproverRole: "accountant",
+    });
+    const business = await repos.business.get();
+    expect(business.currentBalanceCents).toBe(eur(18_420));
+  });
+
+  it("blocks execution when the re-check now needs confirmation and none was given", async () => {
+    const proposal = await createApprovedProposal(repos);
+    const policies = await repos.policies.get();
+    await repos.policies.set({
+      ...policies,
+      confirmationThresholdCents: eur(10),
+    });
+    let submitted = false;
+    const provider: PaymentProvider = {
+      ...createMockProvider(),
+      submit: async () => {
+        submitted = true;
+        return { paymentId: "pay-1", status: "pending" };
+      },
+    };
+
+    await expect(
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ).rejects.toMatchObject({ code: "MISSING_CONFIRMATION" });
+    expect(submitted).toBe(false);
+    const requeued = await repos.proposals.getById(proposal.id);
+    expect(requeued).toMatchObject({
+      status: "awaiting_confirmation",
+      requiresConfirmation: true,
+    });
   });
 
   it("handles a failed provider payment", async () => {
@@ -558,6 +631,46 @@ describe("executePayment", () => {
     expect(updated!.attempts).toBe(1);
   });
 
+  it("still records a resumed payment when the rules changed after it was submitted", async () => {
+    const proposal = await createApprovedProposal(repos, {
+      amountCents: eur(50),
+    });
+    let resolved = false;
+    const provider: PaymentProvider = {
+      submit: async () => ({ paymentId: "pay-inflight", status: "pending" }),
+      getStatus: async () =>
+        resolved
+          ? { status: "confirmed", txHash: "0xsettled" }
+          : { status: "pending" },
+    };
+
+    await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
+    expect((await repos.proposals.getById(proposal.id))!.status).toBe(
+      "executing",
+    );
+
+    // The supplier is blocked while the payment is already on its way. A
+    // fresh payment would be rejected, but this one was authorized and
+    // submitted before the block, so its settlement must still be recorded
+    // rather than the proposal being marked "rejected".
+    await repos.suppliers.update("local-veg", { blocked: true });
+    resolved = true;
+
+    const resumed = await executePayment(proposal.id, repos, provider, {
+      intervalMs: 1,
+      maxAttempts: 1,
+    });
+
+    expect(resumed.status).toBe("confirmed");
+    const updated = await repos.proposals.getById(proposal.id);
+    expect(updated!.status).toBe("executed");
+    const business = await repos.business.get();
+    expect(business.currentBalanceCents).toBe(eur(18_420) - eur(50));
+  });
+
   it("leaves the proposal resumable (not falsely failed) when checking status throws", async () => {
     const proposal = await createApprovedProposal(repos, {
       amountCents: eur(50),
@@ -584,5 +697,107 @@ describe("executePayment", () => {
     // Outcome unknown — balance must stay untouched, not optimistically
     // deducted or reverted.
     expect(business.currentBalanceCents).toBe(eur(18_420));
+  });
+
+  it("lets a reject that lands mid-execution win, and sends nothing", async () => {
+    const proposal = await createApprovedProposal(repos);
+    // Simulate a reject arriving between execution's first read and its
+    // switch to "executing".
+    const realUpdateIfStatus = repos.proposals.updateIfStatus.bind(
+      repos.proposals,
+    );
+    repos.proposals.updateIfStatus = async (id, expected, fields) => {
+      if (fields.status === "executing") {
+        await repos.proposals.update(id, { status: "rejected" });
+      }
+      return realUpdateIfStatus(id, expected, fields);
+    };
+    let submitted = false;
+    const provider: PaymentProvider = {
+      ...createMockProvider(),
+      submit: async () => {
+        submitted = true;
+        return { paymentId: "pay-1", status: "pending" };
+      },
+    };
+
+    await expect(
+      executePayment(proposal.id, repos, provider, {
+        intervalMs: 1,
+        maxAttempts: 1,
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_STATUS" });
+    expect(submitted).toBe(false);
+    expect((await repos.proposals.getById(proposal.id))!.status).toBe(
+      "rejected",
+    );
+  });
+
+  describe("cross-instance execution lock", () => {
+    it("refuses with IN_PROGRESS while another instance is executing the same proposal", async () => {
+      const proposal = await createApprovedProposal(repos);
+      const store = createInMemoryLockStore();
+      await store.tryAcquireLock(
+        `lock:execute:ws-a:${proposal.id}`,
+        "other-instance",
+        60_000,
+      );
+      let submitted = false;
+      const provider: PaymentProvider = {
+        ...createMockProvider(),
+        submit: async () => {
+          submitted = true;
+          return { paymentId: "pay-1", status: "pending" };
+        },
+      };
+
+      await expect(
+        executePayment(proposal.id, repos, provider, {
+          intervalMs: 1,
+          maxAttempts: 1,
+          lock: { store, scope: "ws-a" },
+        }),
+      ).rejects.toMatchObject({ code: "IN_PROGRESS" });
+      expect(submitted).toBe(false);
+      expect((await repos.proposals.getById(proposal.id))!.status).toBe(
+        "approved",
+      );
+    });
+
+    it("releases the lock once execution finishes", async () => {
+      const proposal = await createApprovedProposal(repos);
+      const store = createInMemoryLockStore();
+      const result = await executePayment(
+        proposal.id,
+        repos,
+        createMockProvider(),
+        { intervalMs: 1, maxAttempts: 1, lock: { store, scope: "ws-a" } },
+      );
+      expect(result.status).toBe("confirmed");
+      expect(
+        await store.tryAcquireLock(
+          `lock:execute:ws-a:${proposal.id}`,
+          "next",
+          1_000,
+        ),
+      ).toBe(true);
+    });
+
+    it("does not block the same proposal id in a different workspace", async () => {
+      const proposal = await createApprovedProposal(repos);
+      const store = createInMemoryLockStore();
+      await store.tryAcquireLock(
+        `lock:execute:ws-other:${proposal.id}`,
+        "other-workspace",
+        60_000,
+      );
+      const result = await executePayment(
+        proposal.id,
+        repos,
+        createMockProvider(),
+        { intervalMs: 1, maxAttempts: 1, lock: { store, scope: "ws-a" } },
+      );
+      expect(result.status).toBe("confirmed");
+    });
   });
 });

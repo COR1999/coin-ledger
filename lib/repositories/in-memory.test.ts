@@ -142,4 +142,36 @@ describe("in-memory repositories", () => {
       await repos.transactions.spentOnDateByActorCents("2026-09-30", "aoife"),
     ).toBe(0);
   });
+
+  it("updateIfStatus writes only while the status is still the expected one", async () => {
+    const repos = createInMemoryRepositories();
+    const proposal = await repos.proposals.create({
+      supplierId: "abc-coffee",
+      amountCents: eur(150),
+      currency: "EUR",
+      reason: "Supplier payment",
+      proposedByActorId: "liam",
+      policyDecision: "needs_approval",
+      requiresConfirmation: false,
+      status: "pending",
+    });
+
+    const approved = await repos.proposals.updateIfStatus(
+      proposal.id,
+      ["pending"],
+      { status: "approved", approvedByActorId: "mario" },
+    );
+    expect(approved?.status).toBe("approved");
+
+    // A second, stale "approve" must not write anything.
+    const stale = await repos.proposals.updateIfStatus(
+      proposal.id,
+      ["pending"],
+      { status: "rejected" },
+    );
+    expect(stale).toBeNull();
+    expect((await repos.proposals.getById(proposal.id))!.status).toBe(
+      "approved",
+    );
+  });
 });

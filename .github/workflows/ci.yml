@@ -18,3 +18,11 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run test
+      # Next.js enforces some rules (route export shapes, server/client
+      # boundaries, prerender errors) only at build time. The env schema
+      # requires GOOGLE_API_KEY at startup; a placeholder is enough to build,
+      # and no real secret is ever needed or exposed in CI.
+      - run: npm run build
+        env:
+          GOOGLE_API_KEY: ci-build-placeholder
+          NEXT_TELEMETRY_DISABLED: "1"

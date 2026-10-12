@@ -95,7 +95,6 @@ export async function togglePaymentsPausedAction(
   // Required by useActionState's calling convention even though this
   // action takes no form input to react to — its own live-read state is
   // what decides the next value, not the previous render's.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _prev: PauseToggleResult,
 ): Promise<PauseToggleResult> {
   const repos = getRepositories(await getCurrentWorkspaceId());
@@ -141,7 +140,6 @@ export interface TransparencyToggleResult {
  * a limits edit.
  */
 export async function toggleTransparencyAction(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _prev: TransparencyToggleResult,
 ): Promise<TransparencyToggleResult> {
   const workspaceId = await getCurrentWorkspaceId();

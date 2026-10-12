@@ -32,6 +32,7 @@
  * the demo workspace is ever given a reset policy; a real visitor's
  * onboarded business must never be silently wiped.
  */
+import { z } from "zod";
 import {
   seedActors,
   seedBusiness,
@@ -53,6 +54,17 @@ import {
 import type { Repositories } from "@/lib/repositories/types";
 
 export const DEMO_WORKSPACE_ID = "demo";
+
+/**
+ * Every id this app ever issues: the demo, or `ws-<uuid>` from onboarding
+ * (lib/onboarding.ts). Checked wherever an id arrives from outside (a URL,
+ * a cookie) so arbitrary strings never become Redis keys.
+ */
+export const workspaceIdSchema = z
+  .string()
+  .regex(
+    /^(demo|ws-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+  );
 
 /** How long the demo workspace's Redis snapshot can go untouched before the
  * next request reseeds it back to a clean Mario's Coffee. Long enough that
